@@ -1,0 +1,136 @@
+# Dedicated local stack using the custom image built by install.sh.
+x-app: &app
+  image: ${CUSTOM_IMAGE:?}:${CUSTOM_TAG:?}
+  pull_policy: never
+  restart: unless-stopped
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+
+x-ready: &ready
+  db:
+    condition: service_healthy
+  redis-cache:
+    condition: service_healthy
+  redis-queue:
+    condition: service_healthy
+
+services:
+  db:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:?}
+    command: [--character-set-server=utf8mb4, --collation-server=utf8mb4_unicode_ci, --skip-character-set-client-handshake]
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+
+  redis-cache:
+    image: redis:8.6-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis-queue:
+    image: redis:8.6-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - redis-queue-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  configurator:
+    <<: *app
+    restart: "no"
+    depends_on: *ready
+    command:
+      - bash
+      - -ec
+      - |
+        ls -1 apps > sites/apps.txt
+        bench set-config -g db_host db
+        bench set-config -gp db_port 3306
+        bench set-config -g redis_cache redis://redis-cache:6379
+        bench set-config -g redis_queue redis://redis-queue:6379
+        bench set-config -g redis_socketio redis://redis-queue:6379
+        bench set-config -gp socketio_port 9000
+        bench set-config -g chromium_path /usr/bin/chromium-headless-shell
+
+  create-site:
+    <<: *app
+    restart: "no"
+    depends_on: *ready
+    environment:
+      SITE_NAME: ${SITE_NAME:?}
+      DB_PASSWORD: ${DB_PASSWORD:?}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?}
+    command:
+      - bash
+      - -ec
+      - |
+        if [ ! -f "sites/$$SITE_NAME/site_config.json" ]; then
+          bench new-site "$$SITE_NAME" --db-root-username root \
+            --db-root-password "$$DB_PASSWORD" --admin-password "$$ADMIN_PASSWORD" \
+            --mariadb-user-host-login-scope='%' --install-app statistics_diy
+        else
+          bench --site "$$SITE_NAME" install-app statistics_diy
+        fi
+        bench --site "$$SITE_NAME" migrate
+        bench --site "$$SITE_NAME" enable-scheduler
+
+  backend:
+    <<: *app
+    depends_on: *ready
+
+  frontend:
+    <<: *app
+    command: [nginx-entrypoint.sh]
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:?}
+      NGINX_LISTEN_PORT: "8080"
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8080}:8080"
+    depends_on:
+      - backend
+      - websocket
+
+  websocket:
+    <<: *app
+    command: [node, /home/frappe/frappe-bench/apps/frappe/socketio.js]
+    depends_on: *ready
+
+  queue-short:
+    <<: *app
+    command: [bench, worker, --queue, "short,default"]
+    depends_on: *ready
+
+  queue-long:
+    <<: *app
+    command: [bench, worker, --queue, "long,default,short"]
+    depends_on: *ready
+
+  scheduler:
+    <<: *app
+    command: [bench, schedule]
+    depends_on: *ready
+
+volumes:
+  sites:
+  logs:
+  db-data:
+  redis-queue-data:

@@ -6,6 +6,40 @@ Self-hosted website and app analytics for independent developers.
 
 Project domain: `statistics.diy`
 
+## One-line installation
+
+On Linux or macOS with **Docker running and Docker Compose v2 installed**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/scyllarusllc/statistics.diy/main/install.sh | bash
+```
+
+This builds and starts Frappe version 16, MariaDB, Redis, workers, and Statistics DIY in a dedicated Docker Compose stack. It creates the `statistics.localhost` site and installs `statistics_diy`; no existing Bench is modified. Docker itself is a prerequisite and is not installed by this script.
+
+Open **http://localhost:8080** and sign in as **Administrator**. The generated password is the `ADMIN_PASSWORD` value in `~/.local/share/statistics-diy/.env`. This file is created with private permissions; it is preserved on retries. The installation currently opens the Frappe login/Desk, not a finished analytics dashboard.
+
+The initial image build can take several minutes and requires enough disk space for the Frappe build and its containers. Docker must support BuildKit secrets. The build uses a [pinned official Frappe Docker recipe](https://github.com/frappe/frappe_docker/tree/f71a386bc13f75dcc0cf7462f025f531576a04fc); Frappe's `version-16` branch and the app's `main` branch track their current code.
+
+To choose a different port and installation directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/scyllarusllc/statistics.diy/main/install.sh | STATISTICS_DIY_PORT=8081 STATISTICS_DIY_DIR="$HOME/statistics-diy-server" bash
+```
+
+These settings apply on first installation. Reruns reuse the existing `.env` and persistent database/site volumes. The installer manages one stack named `statistics-diy` per Docker daemon. It does not support multiple instances or upgrades of established deployments yet. If an installation is interrupted, rerun the same command; do not delete database volumes to retry.
+
+Manage the default installation:
+
+```bash
+cd ~/.local/share/statistics-diy
+docker compose ps
+docker compose logs --tail=100
+docker compose stop
+docker compose start
+```
+
+The web port binds to localhost. Public deployment requires a reverse proxy with HTTPS, appropriate host/proxy settings, and a backup plan. Domain hosting and TLS are not configured by this installer.
+
 ## Status
 
 Version one will be an independent Frappe app named `statistics_diy`. This repository contains its packaging and application skeleton. Analytics DocTypes, collection endpoints, dashboards, SDKs, and deployment configuration are not implemented yet.
@@ -41,7 +75,7 @@ Existing projects such as [Umami](https://docs.umami.is/docs/about) and [Plausib
 - Multiple websites and apps in one instance.
 - Project-scoped collection credentials and isolated reporting data.
 - Administrator authentication and project access controls.
-- Installation on an existing Frappe Bench; a documented container deployment is planned.
+- One-line Docker installation or installation on an existing Frappe Bench.
 - Setup documentation and synthetic demonstration data.
 
 Session replay, experiments, advertising attribution, and payment processing are outside the first release scope.
@@ -77,7 +111,7 @@ Exact collection defaults and retention periods will be documented as the implem
 - **Data model:** project-scoped DocTypes for projects, events, anonymous installs, daily activity, and reporting aggregates. Detailed schemas remain to be implemented.
 - **Dashboard:** Frappe-backed analytics pages with authentication and project access controls.
 - **Background work:** Frappe queues and scheduler for aggregation and retention tasks.
-- **Deployment:** an existing Frappe Bench initially, with container deployment documentation planned.
+- **Deployment:** the one-line Docker installer, or an existing Frappe Bench.
 
 Frappe supplies the initial application foundation, permissions, migrations, and background jobs. Collection clients do not need Frappe: ordinary websites and desktop/mobile apps will submit events over HTTP. VibeCMS will be one such client.
 
@@ -114,6 +148,15 @@ The package requires Python 3.10 or newer. The selected Frappe release may requi
 Meaningful verification should cover project isolation, event validation, retry behavior, timezone boundaries, daily/monthly distinct counts, retention boundaries, and period ping totals.
 
 The app skeleton has not yet been installed on a Frappe site. Analytics tests and their execution commands will be added with the implementation.
+
+Installer contract checks can be run without Docker:
+
+```bash
+python3 -m unittest discover -s tests -v
+bash -n install.sh
+```
+
+These tests simulate downloads and Docker commands. They verify installation order, private credential files, retries, and input validation; they do not validate a running Frappe deployment. A full Docker build and site startup have not yet been verified.
 
 ## License
 
