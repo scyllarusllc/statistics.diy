@@ -1,0 +1,14 @@
+[project]
+name = "statistics_diy"
+authors = [{ name = "Statistics DIY contributors" }]
+description = "Self-hosted website and app analytics for Frappe"
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = []
+
+[build-system]
+requires = ["flit_core>=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.bench.dev-dependencies]

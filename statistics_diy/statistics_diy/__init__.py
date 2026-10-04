@@ -1,0 +1,1 @@
+"""Statistics DIY Frappe module."""

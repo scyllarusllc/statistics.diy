@@ -1,0 +1,6 @@
+app_name = "statistics_diy"
+app_title = "Statistics DIY"
+app_publisher = "Statistics DIY contributors"
+app_description = "Self-hosted website and app analytics"
+app_email = ""
+app_license = "MIT"

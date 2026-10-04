@@ -1,0 +1,25 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and generated files
+node_modules/
+dist/
+build/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+coverage/
+.coverage
+
+# Local data and logs
+data/
+backups/
+*.log
+
+# OS files
+.DS_Store
