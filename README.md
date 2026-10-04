@@ -121,6 +121,47 @@ A separate collector or analytics database can be introduced later if measured t
 
 ## Install the app skeleton
 
+### Local development with Make
+
+With Docker running and Docker Compose v2 installed:
+
+```bash
+make dev
+```
+
+The first run builds a development image with Python 3.14, Node 24, Yarn,
+Redis, and Bench, initializes a separate Frappe `version-16` Bench, creates
+`statistics.localhost`, installs this checkout, enables developer mode, and
+finally runs `bench start` in the foreground inside the container. The current
+source directory is mounted and linked into Bench so edits use your local code.
+The version requirements follow the [Frappe installation guide](https://docs.frappe.io/framework/user/en/installation).
+Docker itself must already be installed and accessible to your user.
+
+Open **http://localhost:8000** and log in as **Administrator** with password
+**statistics-dev-admin**. These fixed credentials are only for local development;
+the web and Socket.IO ports bind to localhost and the database has no published
+port. The app currently opens the Frappe Desk, without analytics features.
+
+Press Ctrl+C to stop Bench. Rerun `make dev` to reuse the Bench, site, and database
+stored in Docker volumes. Run `make dev-stop` to stop the development stack while
+preserving those volumes. This uses a separate Compose project from `install.sh`.
+Do not run two `make dev` sessions at once. On Linux, files generated in the
+mounted checkout belong to container UID 1000; your user may need to adjust their
+ownership before editing them.
+
+To use different host ports:
+
+```bash
+STATISTICS_DIY_DEV_PORT=8001 STATISTICS_DIY_DEV_SOCKETIO_PORT=9001 make dev
+```
+
+First-time setup requires network access and can take several minutes. If setup
+fails, `bench start` is not run; retry after resolving the reported error. An
+incomplete initial Bench clone or virtual environment requires inspection of the
+development volume before retrying; the script does not delete existing data.
+
+### Existing Bench
+
 From an existing, compatible Frappe Bench, install this local checkout:
 
 ```bash
