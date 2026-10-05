@@ -7,7 +7,7 @@ COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=uv /uv /usr/local/bin/uv
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && apt-get update \
-    && apt-get install -y --no-install-recommends git redis-server mariadb-client \
+    && apt-get install -y --no-install-recommends git cron redis-server mariadb-client \
        libmariadb-dev pkg-config gettext libpango-1.0-0 libharfbuzz0b \
        libpangoft2-1.0-0 libffi-dev libssl-dev libldap2-dev libsasl2-dev \
     && rm -rf /var/lib/apt/lists/* \

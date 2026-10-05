@@ -1,0 +1,13 @@
+{
+  "doctype": "Page",
+  "name": "analytics",
+  "page_name": "analytics",
+  "title": "Statistics DIY",
+  "module": "Statistics DIY",
+  "standard": "Yes",
+  "roles": [
+    {
+      "role": "System Manager"
+    }
+  ]
+}

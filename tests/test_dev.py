@@ -18,6 +18,7 @@ class DevTests(unittest.TestCase):
         self.log = self.base / "commands"
         self.env = dict(os.environ, PATH=f"{binary}:{os.environ['PATH']}",
                         STATISTICS_DIY_DEV_WORKSPACE=str(self.base),
+                        GIT_CONFIG_GLOBAL=str(self.base / "gitconfig"),
                         SITE_NAME="statistics.localhost", DB_ROOT_PASSWORD="test",
                         ADMIN_PASSWORD="test", BENCH_LOG=str(self.log))
         stubs = {

@@ -42,7 +42,7 @@ The web port binds to localhost. Public deployment requires a reverse proxy with
 
 ## Status
 
-Version one will be an independent Frappe app named `statistics_diy`. This repository contains its packaging and application skeleton. Analytics DocTypes, collection endpoints, dashboards, SDKs, and deployment configuration are not implemented yet.
+`statistics_diy` is an independent Frappe app. The first website analytics slice includes projects, page-view collection, a tracking script and a basic Desk report. App analytics and advanced reporting remain to be implemented.
 
 ## Why this project exists
 
@@ -140,7 +140,7 @@ Docker itself must already be installed and accessible to your user.
 Open **http://localhost:8000** and log in as **Administrator** with password
 **statistics-dev-admin**. These fixed credentials are only for local development;
 the web and Socket.IO ports bind to localhost and the database has no published
-port. The app currently opens the Frappe Desk, without analytics features.
+port. Open `/app/analytics` in Frappe Desk for the initial page-view report.
 
 Press Ctrl+C to stop Bench. Rerun `make dev` to reuse the Bench, site, and database
 stored in Docker volumes. Run `make dev-stop` to stop the development stack while
@@ -188,7 +188,7 @@ The package requires Python 3.10 or newer. The selected Frappe release may requi
 
 Meaningful verification should cover project isolation, event validation, retry behavior, timezone boundaries, daily/monthly distinct counts, retention boundaries, and period ping totals.
 
-The app skeleton has not yet been installed on a Frappe site. Analytics tests and their execution commands will be added with the implementation.
+The app is installed on the development Frappe site. The analytics integration verification command is documented below.
 
 Installer contract checks can be run without Docker:
 
@@ -202,3 +202,41 @@ These tests simulate downloads and Docker commands. They verify installation ord
 ## License
 
 MIT is the proposed license. A license file and copyright attribution will be added before the first public release, after confirming ownership and any reused code licenses.
+
+## First analytics workflow
+
+The app now includes **Analytics Project**, **Analytics Event**, a page-view tracker,
+and a Desk page at `/app/analytics` (System Manager access).
+
+1. Open `/app/analytics` and select **Create Project**.
+2. Enter the project name and exact website origin, e.g. `https://example.com`.
+3. Save and copy **Tracking Snippet** into the website's HTML.
+4. Choose the project on `/app/analytics` to see page views, daily totals and top paths.
+
+The current snippet uses `https://statistics.diy` as the collector host. For another
+installation, adjust the script URL. Collection keys are public project identifiers,
+not secrets. Origin checks discourage accidental cross-project submissions but do
+not authenticate arbitrary HTTP clients or prevent forged analytics.
+
+This first slice records server receipt time in UTC, pathname and referrer hostname.
+It does not store IP addresses, query strings, visitor identifiers or cookies. The
+tracker honors browser Do Not Track. It tracks initial document loads; SPA navigation,
+unique visitors, app activity, country/device reports and automated retention are not
+implemented. Reports cover a rolling 30-day window; events currently remain stored
+until explicitly deleted. Collection is capped at 1,000 requests per project per minute.
+
+Apply schema and asset changes in a Bench using:
+
+```bash
+bench --site statistics.localhost migrate
+bench build --app statistics_diy
+```
+
+Integration verification creates temporary projects and events and removes them:
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.run
+```
+
+This verification includes an HTTP request through `https://statistics.diy`; adapt
+that URL when validating another deployment.

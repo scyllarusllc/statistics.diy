@@ -1,0 +1,62 @@
+{
+  "doctype": "DocType",
+  "name": "Analytics Project",
+  "module": "Statistics DIY",
+  "autoname": "hash",
+  "engine": "InnoDB",
+  "field_order": [
+    "project_name",
+    "website_origin",
+    "enabled",
+    "collection_key",
+    "tracking_snippet"
+  ],
+  "fields": [
+    {
+      "fieldname": "project_name",
+      "label": "Project Name",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "website_origin",
+      "label": "Website Origin",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "description": "Exact origin, e.g. https://example.com"
+    },
+    {
+      "fieldname": "enabled",
+      "label": "Enabled",
+      "fieldtype": "Check",
+      "default": "1"
+    },
+    {
+      "fieldname": "collection_key",
+      "label": "Collection Key",
+      "fieldtype": "Data",
+      "read_only": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "tracking_snippet",
+      "label": "Tracking Snippet",
+      "fieldtype": "Code",
+      "options": "HTML",
+      "read_only": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1
+    }
+  ],
+  "track_changes": 1,
+  "title_field": "project_name"
+}

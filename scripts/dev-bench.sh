@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# The host checkout can have a different owner from the container's frappe user.
+git config --global --replace-all safe.directory /src/statistics_diy
 WORKSPACE=${STATISTICS_DIY_DEV_WORKSPACE:-/workspace}
 cd "$WORKSPACE"
 if [[ ! -f bench/.initialized ]]; then

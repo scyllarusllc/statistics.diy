@@ -1,0 +1,61 @@
+{
+  "doctype": "DocType",
+  "name": "Analytics Event",
+  "module": "Statistics DIY",
+  "autoname": "hash",
+  "engine": "InnoDB",
+  "field_order": [
+    "project",
+    "event_id",
+    "occurred_at",
+    "path",
+    "referrer_host"
+  ],
+  "fields": [
+    {
+      "fieldname": "project",
+      "label": "Project",
+      "fieldtype": "Link",
+      "options": "Analytics Project",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "event_id",
+      "label": "Event ID",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "occurred_at",
+      "label": "Received At (UTC)",
+      "fieldtype": "Datetime",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "path",
+      "label": "Path",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "referrer_host",
+      "label": "Referrer Host",
+      "fieldtype": "Data"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1
+    }
+  ],
+  "track_changes": 0
+}
