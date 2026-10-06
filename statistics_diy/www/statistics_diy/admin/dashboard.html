@@ -1,10 +1,61 @@
 {% extends "statistics_diy/templates/admin.html" %}
+{% macro panel(title, id) %}
+<section class="analytics-panel min-w-0"><h3 class="analytics-panel-title">{{ t(title) }}</h3><div id="{{ id }}" class="analytics-table-scroll"></div></section>
+{% endmacro %}
 {% block content %}
-<div class="mb-8 flex flex-wrap justify-between gap-4"><div><p class="mb-2 text-xs font-semibold tracking-widest text-indigo-600">OVERVIEW</p><h1 class="text-3xl font-bold">统计仪表盘</h1><p class="mt-2 text-slate-500">最近 30 天 · UTC · 网站访问趋势</p></div><a class="self-start rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium hover:border-indigo-400" href="/statistics_diy/admin/projects">管理项目 →</a></div>
+<div class="mb-7 flex flex-wrap items-end justify-between gap-4">
+  <div><p class="mb-2 text-xs font-semibold tracking-widest text-indigo-600">{{ t('OVERVIEW') }}</p><h1 class="text-3xl font-bold tracking-tight">{{ t('Dashboard') }}</h1><p class="mt-2 text-sm text-slate-500">{{ t('Website traffic · UTC') }}</p></div>
+  <a id="manage-project" class="analytics-button-secondary" href="/statistics_diy/admin/projects">{{ t('Manage projects') }} →</a>
+</div>
 {% if projects %}
-<div class="mb-6 flex flex-wrap items-end gap-3"><label class="text-sm font-medium" for="analytics-project">统计项目<select id="analytics-project" class="mt-2 block max-w-full rounded-xl border border-slate-300 bg-white px-4 py-3">{% for project in projects %}<option value="{{ project.name | e }}">{{ project.project_name | e }}{% if not project.enabled %}（已停用）{% endif %}</option>{% endfor %}</select></label><button id="refresh-statistics" class="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white hover:bg-indigo-700">刷新</button><a id="manage-project" class="px-3 py-3 text-sm text-indigo-600" href="/statistics_diy/admin/projects">管理项目 / 获取追踪代码</a></div>
+<div class="analytics-panel mb-6">
+  <div class="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px_auto]">
+    <label class="analytics-field-label" for="analytics-project">{{ t('Projects') }}
+      <select id="analytics-project" class="analytics-select"><option value="">{{ t('All projects') }}</option>{% for project in projects %}<option value="{{ project.name | e }}">{{ project.project_name | e }}{% if not project.enabled %} {{ t('(disabled)') }}{% endif %}</option>{% endfor %}</select>
+    </label>
+    <label class="analytics-field-label" for="report-range">{{ t('Date range') }}
+      <select id="report-range" class="analytics-select">{% for days in [7,30,90,365] %}<option value="{{ days }}" {% if days == 30 %}selected{% endif %}>{{ t('Last ' ~ days ~ ' days') }}</option>{% endfor %}</select>
+    </label>
+    <div class="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-1"><button id="refresh-statistics" class="analytics-button-primary">{{ t('Refresh') }}</button><button id="export-statistics" disabled class="analytics-button-secondary">{{ t('Export CSV') }}</button></div>
+  </div>
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+    <div class="flex flex-wrap gap-5 text-xs text-slate-600"><label class="flex items-center gap-2"><input id="auto-refresh" type="checkbox" class="accent-indigo-600">{{ t('Auto refresh') }}</label><label class="flex items-center gap-2"><input id="exclude-bots" type="checkbox" checked class="accent-indigo-600">{{ t('Exclude detected bots') }}</label></div>
+    <p id="event-summary" class="text-xs text-slate-400"></p>
+  </div>
+</div>
 <p id="statistics-status" class="mb-4 text-sm text-slate-500" role="status" aria-live="polite"></p>
-<div id="statistics-results" hidden><div class="mb-6 rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"><p class="text-sm text-slate-500">页面浏览量</p><strong id="total-views" class="my-3 block text-5xl font-bold tracking-tight"></strong><p class="text-xs text-slate-500">浏览量不代表独立访客数。</p></div><div class="grid gap-6 md:grid-cols-2"><section class="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-5 text-lg font-semibold">每日浏览量</h2><div id="daily-views"></div></section><section class="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-5 text-lg font-semibold">热门页面</h2><div id="top-pages"></div></section></div></div>
-{% else %}<div class="rounded-2xl border border-dashed border-slate-300 p-12 text-center"><h2 class="text-xl font-semibold">开始收集网站访问数据</h2><p class="mt-3 text-slate-500">创建项目并将追踪代码放入网站，访问事件会显示在这里。</p><a class="mt-6 inline-block rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white" href="/statistics_diy/admin/projects">创建第一个项目</a></div>{% endif %}
+<div id="statistics-results" hidden class="space-y-8">
+  <nav class="flex flex-wrap gap-2 text-xs font-medium" aria-label="{{ t('Dashboard sections') }}">{% for anchor, title in [('overview','Overview'),('traffic','Traffic sources'),('audience','Audience'),('activity','Visit details'),('apps','App activity')] %}<a href="#{{ anchor }}" class="rounded-full border border-slate-200 bg-white px-4 py-2 text-slate-600 hover:border-indigo-300 hover:text-indigo-600">{{ t(title) }}</a>{% endfor %}</nav>
+  <section id="overview" class="scroll-mt-6 space-y-5">
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section class="analytics-metric"><h2 class="analytics-metric-label">{{ t('Page views') }}</h2><strong id="total-views" class="analytics-metric-value"></strong><p class="analytics-metric-note">{{ t('Selected period') }}</p></section>
+      <section class="analytics-metric border-indigo-200"><h2 id="visitor-card-label" class="analytics-metric-label">{{ t('Unique visitors') }}</h2><strong id="unique-visitors" class="analytics-metric-value text-indigo-600"></strong><p class="analytics-metric-note">{{ t('Browser IDs with IP fallback') }}</p></section>
+      <section class="analytics-metric"><h2 class="analytics-metric-label">{{ t('Repeat visitors') }}</h2><strong id="returning-visitors" class="analytics-metric-value"></strong><p class="analytics-metric-note">{{ t('Repeat / total visitors') }}</p></section>
+      <section class="analytics-metric"><h2 class="analytics-metric-label">{{ t('Today · views / visitors') }}</h2><strong id="today-statistics" class="analytics-metric-value"></strong><p class="analytics-metric-note">UTC</p></section>
+    </div>
+    <p id="visitor-coverage" class="px-1 text-xs leading-relaxed text-slate-500"></p>
+    <section class="analytics-panel">
+      <div class="flex flex-wrap items-start justify-between gap-4"><div><h2 class="analytics-panel-title mb-1">{{ t('Traffic trend') }}</h2><p id="report-period" class="text-xs text-slate-500"></p></div><div class="flex flex-wrap items-center gap-4 text-xs"><label class="flex items-center gap-2"><input id="chart-views" type="checkbox" checked class="accent-indigo-600"><span class="text-indigo-600">{{ t('Page views') }}</span></label><label class="flex items-center gap-2"><input id="chart-visitors" type="checkbox" checked class="accent-emerald-600"><span class="text-emerald-600">{{ t('Unique visitors') }}</span></label><button id="clear-day" type="button" hidden class="analytics-button-secondary">{{ t('Back to full range') }}</button></div></div>
+      <div class="my-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2"><p id="chart-tooltip" class="min-h-5 text-xs font-medium" role="status" aria-live="polite"></p><p id="chart-legend" class="text-xs text-slate-400"></p></div>
+      <p id="selected-chart-day" class="mb-3 text-xs font-medium text-indigo-600" role="status"></p><div id="traffic-chart" class="relative pl-10"></div><p class="mt-3 text-xs text-slate-400">{{ t('Move to inspect. Click or tap to select a day; click again to reset. Arrow keys navigate, Enter selects, Escape resets.') }}</p>
+    </section>
+    <section id="project-overview" class="analytics-panel"><h2 class="analytics-panel-title">{{ t('Projects summary') }}</h2><div id="project-totals" class="grid gap-3 md:grid-cols-2"></div></section>
+  </section>
+  <section id="traffic" class="scroll-mt-6 space-y-4"><h2 class="analytics-section-title">{{ t('Traffic sources') }}</h2><div class="grid gap-5 lg:grid-cols-2">{{ panel('Top pages','top-pages') }}{{ panel('Referral sources','referrers') }}</div>
+    <details class="analytics-panel"><summary class="cursor-pointer text-sm font-semibold">{{ t('Daily page views') }}</summary><div id="daily-views" class="analytics-table-scroll mt-5 max-h-80"></div></details>
+  </section>
+  <section id="audience" class="scroll-mt-6 space-y-4"><h2 class="analytics-section-title">{{ t('Audience') }}</h2><div class="grid gap-5 lg:grid-cols-3">{% for id, title in [('device','Devices'),('browser','Browsers'),('operating_system','Operating systems')] %}{{ panel(title,'breakdown-' ~ id) }}{% endfor %}</div>
+    <section class="analytics-panel"><div class="mb-5 flex flex-wrap items-center justify-between gap-3"><h3 class="analytics-panel-title mb-0">{{ t('Top IP addresses') }}</h3><p class="text-xs text-slate-400">{{ t('Countries and cities are approximate IP locations.') }} <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer" class="text-indigo-600">DB-IP</a></p></div><div id="top-ips" class="analytics-table-scroll max-h-96"></div></section>
+  </section>
+  <section id="activity" class="scroll-mt-6 space-y-4"><h2 class="analytics-section-title">{{ t('Visit details') }}</h2>
+    <section class="analytics-panel"><h3 class="analytics-panel-title mb-2">{{ t('Recent visits') }}</h3><p class="mb-5 text-xs text-slate-400">{{ t('Latest 20 visits in the selected period. Times are UTC.') }}</p><div id="recent-visits" class="analytics-table-scroll max-h-[480px]"></div></section>
+    <details class="analytics-panel"><summary class="cursor-pointer text-sm font-semibold">{{ t('Known visitors') }}</summary><p class="my-4 text-xs text-slate-400">{{ t('Latest 30 browser IDs in this period. Labels are private to this project. Counts cover the selected period.') }}</p><div id="known-visitors" class="analytics-table-scroll max-h-96"></div></details>
+  </section>
+  <section id="apps" class="scroll-mt-6 space-y-4"><h2 class="analytics-section-title">{{ t('App activity') }}</h2><section class="analytics-panel"><p class="mb-5 text-xs leading-relaxed text-slate-500">{{ t('Anonymous install estimates from timestamped app pings. DAU is today; MAU is the last 30 UTC dates.') }}</p><div id="app-statistics" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"></div><div id="app-platforms" class="analytics-table-scroll mt-6"></div></section></section>
+  <details class="analytics-panel"><summary class="cursor-pointer text-sm font-semibold">{{ t('Data and privacy') }}</summary><p class="mt-4 text-sm leading-relaxed text-slate-500">{{ t('Browser IDs are preferred; missing IDs fall back to IP within each project. Shared or changing IPs affect estimates.') }}</p><p class="mt-3 text-sm leading-relaxed text-slate-500">{{ t('Anonymous IDs expire after 90 days. IP addresses are stored with visits and deleted under the retention policy. No device fingerprints are stored. Country flags use an offline IP geolocation database.') }}</p><a class="mt-4 inline-block text-sm text-indigo-600" href="/statistics_diy/admin/settings">{{ t('Manage retention and data') }} →</a></details>
+</div>
+{% else %}
+<div class="analytics-panel py-12 text-center"><h2 class="text-xl font-semibold">{{ t('Start collecting website traffic') }}</h2><p class="mt-3 text-sm text-slate-500">{{ t('Create a project and add its tracking code to your website. Page views will appear here.') }}</p><a class="analytics-button-primary mt-6 inline-block" href="/statistics_diy/admin/projects">{{ t('Create your first project') }}</a></div>
+{% endif %}
 {% endblock %}
-{% block scripts %}<script src="/assets/statistics_diy/js/dashboard.js?v=20261006"></script>{% endblock %}
+{% block scripts %}<script src="/assets/statistics_diy/js/dashboard.js?v=20261006-chartux"></script>{% endblock %}

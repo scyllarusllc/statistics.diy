@@ -1,0 +1,31 @@
+{
+  "doctype": "DocType",
+  "name": "Analytics Settings",
+  "module": "Statistics DIY",
+  "autoname": "hash",
+  "issingle": 1,
+  "fields": [
+    {
+      "fieldname": "retention_days",
+      "label": "Retention Days",
+      "fieldtype": "Select",
+      "options": "30\n90\n180\n365",
+      "default": "180",
+      "reqd": 1
+    }
+  ],
+  "field_order": [
+    "retention_days"
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1
+    }
+  ],
+  "engine": "InnoDB"
+}

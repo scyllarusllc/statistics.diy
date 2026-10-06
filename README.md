@@ -94,7 +94,7 @@ Session replay, experiments, advertising attribution, and payment processing are
 ## Privacy direction
 
 - Avoid persistent browser fingerprinting by default.
-- Avoid retaining raw IP addresses by default. If country lookup is enabled, use request IPs transiently and store only the necessary coarse location.
+- Website IP reports retain visitor addresses under the configured retention policy. App activity uses anonymous install IDs and does not store IPs.
 - Use client-generated, resettable anonymous install IDs for optional app analytics.
 - Respect website tracking opt-out settings and document collection behavior.
 - Document how website unique visitor estimates are calculated and their limitations before implementation.
@@ -145,7 +145,12 @@ port. Open `/app/analytics` in Frappe Desk for the initial page-view report.
 Press Ctrl+C to stop Bench. Rerun `make dev` to reuse the Bench, site, and database
 stored in Docker volumes. Run `make dev-stop` to stop the development stack while
 preserving those volumes. This uses a separate Compose project from `install.sh`.
-Do not run two `make dev` sessions at once. On Linux, files generated in the
+Do not run two `make dev` sessions at once. Before building, `make dev` checks
+both host ports. If a port is occupied, it shows the listener and asks
+`Stop these listeners and continue? [y/N]`. Confirming stops the owning Docker
+container (preserving its volumes) or sends SIGTERM to the host process, then
+waits for the port to become free. Declining or running without input cancels
+startup. It never forces a kill. Port checks require `ss` or `lsof`. On Linux, files generated in the
 mounted checkout belong to container UID 1000; your user may need to adjust their
 ownership before editing them.
 
@@ -212,7 +217,7 @@ and custom Tailwind CSS pages at `/statistics_diy/admin/dashboard` and
 1. Sign in at `/statistics_diy/login`, open `/statistics_diy/admin/projects` and select **创建项目**.
 2. Enter the project name and exact website origin, e.g. `https://example.com`.
 3. Save and expand **获取追踪代码**, then copy the snippet into the website's HTML.
-4. Choose the project on `/statistics_diy/admin/dashboard` to see page views, daily totals and top paths.
+4. Choose the project on `/statistics_diy/admin/dashboard` to see page views, daily totals, top paths and referral sources. Select a 7/30/90-day range or export the report as CSV.
 
 The current snippet uses `https://statistics.diy` as the collector host. For another
 installation, adjust the script URL. Collection keys are public project identifiers,
@@ -220,10 +225,10 @@ not secrets. Origin checks discourage accidental cross-project submissions but d
 not authenticate arbitrary HTTP clients or prevent forged analytics.
 
 This first slice records server receipt time in UTC, pathname and referrer hostname.
-It does not store IP addresses, query strings, visitor identifiers or cookies. The
+It stores visitor IP addresses for IP reports, but does not store query strings or cookies. The tracker uses an anonymous browser identifier for unique visitor estimates, described below. The
 tracker honors browser Do Not Track. It tracks initial document loads; SPA navigation,
-unique visitors, app activity, country/device reports and automated retention are not
-implemented. Reports cover a rolling 30-day window; events currently remain stored
+app activity, country/device reports and automated retention are not
+implemented. Reports cover selectable 7/30/90 UTC calendar days, including today; events currently remain stored
 until explicitly deleted. Collection is capped at 1,000 requests per project per minute.
 
 Apply schema and asset changes in a Bench using:
@@ -262,4 +267,212 @@ Verify the administration pages and project editor inside Bench:
 bench --site statistics.localhost execute statistics_diy.verify.dashboard
 bench --site statistics.localhost execute statistics_diy.verify.projects
 bench --site statistics.localhost execute statistics_diy.verify.project_editor
+```
+
+### Report ranges and exports
+
+Dashboard ranges include the current UTC date and the preceding 6, 29 or 89 dates.
+Today is partial. Days without events show zero; events outside the date boundaries
+are excluded. Page and referral tables include the top 10 entries. Empty referrers
+are labelled Direct / Unknown. The CSV includes daily totals and both top-10 tables
+for the selected project and date range; it is not a raw event export.
+
+Verify report boundaries and aggregation:
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.reports
+```
+
+The dashboard defaults to **All projects**, showing combined page views and daily
+traffic plus a total for every project, including projects with zero traffic or
+collection disabled. Select a project or click its summary row for details.
+Combined top pages remain separated by project even when paths match. CSV exports
+include project totals and identify the project for each top-page entry.
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.all_projects
+```
+
+### Unique visitor estimates
+
+The tracker now assigns an anonymous UUID in the tracked website's localStorage,
+separately for each project, with a fixed 90-day lifetime. The collector stores a
+project-scoped SHA-256 hash. Unique visitors count distinct browser identifiers
+within the selected period; daily counts deduplicate separately each UTC day.
+All-project totals sum project-specific unique counts rather than deduplicating
+people across websites. Different browsers, cleared storage and expiration can
+increase counts. These are estimates of browsers, not people.
+
+Older events or storage-blocked browsers have no visitor identifier. Their views
+remain included and can use IP fallback when an address is recorded; the dashboard displays the
+number of unmeasured views. Daily unique counts must not be summed to determine
+period uniques. CSV exports include uniques for project and daily rows.
+
+The tracker uses a stable, unversioned URL. The reverse proxy must send
+`Cache-Control: no-cache, max-age=0, must-revalidate` for this file, so browsers
+revalidate it on each page load. Existing versioned URLs continue to work. Add `data-visitors="off"` to the script to disable
+visitor storage while still counting page views. Do Not Track and Global Privacy
+Control disable both collection and visitor storage.
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.visitors
+```
+
+### Visitor details and app analytics
+
+The dashboard now supports 365-day selection, optional auto refresh every minute
+while the tab is visible, and heuristic User-Agent bot exclusion. It shows repeat
+browser IDs (more than one page view in the selected period), today's UTC totals,
+devices/browsers/operating systems, recent visits and editable project-specific
+visitor labels. Both views and unique browsers are shown for pages, referrers and
+breakdowns. Historical events without metadata appear as Unknown; session counts
+are unavailable for events without session IDs. New tracker sessions are per tab,
+renewed after 30 minutes of inactivity between tracked page loads. No persistent
+device fingerprint or raw User-Agent is stored.
+
+The stable tracker URL delivers session and timezone collection updates without changing website snippets.
+Detected bots are stored but excluded from reports by default. Bot detection is
+heuristic, not proof that every included visitor is human. Country/city lookup is not configured. IP addresses are now stored for recent visits and top-IP reports, under the event retention policy. The reference statistics are not seed data.
+
+Expand **App integration** on a project for its separate app collection token.
+Send JSON to `POST /api/method/statistics_diy.activity.ping` with `token`,
+`install_id` (random UUID stored on first launch), `event_id` (new UUID per ping),
+`platform` (Windows/Linux/macOS/iOS/Android/Other) and `app_version`. Retry with the
+same event ID to avoid double counting. The token identifies app traffic; it is
+not proof of a real install, and distributing it in a client cannot prevent forged
+activity. Installs are project-scoped estimates, not people. DAU counts installs
+with pings today in UTC; MAU counts installs active on the latest 30 UTC dates.
+These counters use timestamped events, not a mutable last-seen value, and are
+independent of the selected website report range.
+
+Settings controls retention (30/90/180/365 days, default 180). Daily cleanup deletes
+expired website/app events and orphaned labels. Dates outside retention are shown
+as unavailable instead of zero. Known installs cover retained activity, not
+lifetime installs. The **Clear analytics data** action requires typing
+`DELETE ANALYTICS`; it preserves project configurations. No live data is cleared
+merely by adding this control.
+
+Verification uses temporary data and rolls changes back:
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.advanced
+```
+
+The traffic trend supports visible hover/focus tooltips, views/visitor series
+checkboxes, and clickable day selection. Selecting a retained day filters website
+report totals, tables and exports while keeping the full-range trend visible.
+**Back to full range** clears the selection. Arrow keys, Home/End and Enter/Space
+navigate and select days. Dates outside retention cannot be selected. Today's
+counters and app DAU/MAU retain their explicitly labelled time windows.
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.trend_interactions
+```
+
+### IP addresses
+
+New website events store normalized IPv4/IPv6 addresses. Recent visits, the top-15
+IP table and CSV exports include them. Existing records without IPs remain
+unrecorded; IP is used as a fallback only when a browser ID is missing. These records follow the
+same retention and clear-data controls as other website events. App pings do not
+store IPs. Location lookup remains unconfigured.
+
+The current Caddy proxy overwrites `X-Statistics-Client-IP` and authenticates that
+header to Frappe using `X-Statistics-Proxy-Token`, matched against the private
+`statistics_proxy_token` site configuration. It accepts `CF-Connecting-IP` only
+from Cloudflare's published network ranges; other requests use the direct peer
+address. Unauthenticated forwarded headers are ignored by the app. Future proxy
+deployments must configure the same trust boundary rather than passing arbitrary
+client headers. Keep the proxy token private and Cloudflare ranges current.
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.ip_addresses
+```
+
+### Country flags
+
+Top IPs and recent visits show country flag emoji, with the country name on hover.
+Lookups run locally against DB-IP Country Lite; no visitor IP is sent to a lookup
+service. Private, invalid or unknown addresses have no flag. Country assignments
+are approximate and based on the current database, including for historical IPs.
+
+The deployed October 2026 database is stored in the persistent development volume
+at `/workspace/geoip/country.mmdb`. It is not included in this repository. For another
+installation, provide a current MMDB file and set `statistics_geoip_database` in
+site configuration (or `STATISTICS_GEOIP_DATABASE` in the environment). Refresh the
+file periodically using DB-IP's monthly release. The dashboard includes the required
+[DB-IP attribution](https://db-ip.com/db/download/ip-to-country-lite).
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.country_flags
+```
+
+### Public homepage
+
+`/statistics_diy/user/homepage` is the custom Tailwind homepage and is also served
+at `/`. Guests can sign in; administrators get dashboard and project links. The
+root is pinned to this page even when a Frappe workspace defines another homepage.
+Existing administration and collection routes continue through normal routing.
+The homepage supports the same English/Chinese preference as the rest of the site.
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.homepage
+```
+
+### Unique-count coverage and cached trackers
+
+The visitor card is marked **partial** when some views lack browser IDs and shows
+how many views are identifiable. If a project has views but no visitor IDs, its
+unique total is shown as unavailable instead of a definitive zero. Historical
+browser IDs cannot be reconstructed; recorded IPs can provide fallback estimates.
+
+After changing a tracker cache policy, existing CDN entries may still serve an
+older script until expiry. Purge the exact stable tracker URL once in Cloudflare:
+`https://statistics.diy/assets/statistics_diy/js/tracker.js`. The origin already
+sends revalidation headers, so websites do not need versioned snippet edits.
+
+Browser-ID stability checks can be run with:
+
+```bash
+node tests/test_tracker.js
+```
+
+### IP fallback for visitor estimates
+
+Reports prefer browser IDs. When a view has no browser ID, its recorded IP is used
+as a fallback. A repeated IP counts once per project in the report scope. If that
+IP also appears with browser IDs in the same scope, missing-ID views use a
+deterministic existing browser representative instead of adding another visitor.
+Known browser IDs remain distinct even when they share an IP, and a browser ID
+remains one visitor when its IP changes. Daily/category reports resolve the fallback
+within their own day/category scope. This is an estimate: shared IPs can undercount,
+changing IPs can overcount, and ambiguous missing-ID views cannot be attributed to
+a particular browser with certainty.
+
+The card reports extra visitors estimated from unmatched IPs, views using fallback,
+and views lacking both identifiers. Events lacking both stay unavailable; historical
+records are not rewritten. Visitor labels remain tied to explicit browser IDs.
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.ip_fallback
+```
+
+Country flags also show the estimated city beside the IP; hover reveals the region
+and country. Lookups prefer `/workspace/geoip/city.mmdb` when available, falling
+back to the country-only database otherwise. Unknown records remain without a
+city. The deployed database is the verified October 2026
+[DB-IP City Lite](https://db-ip.com/db/download/ip-to-city-lite) release in the
+persistent development volume. Visitor IPs are not sent to an external lookup API.
+
+Verify with `bench --site statistics.localhost execute statistics_diy.verify.cities`.
+
+The trend now snaps pointer movement to the nearest date, displays a floating
+metrics tooltip and crosshair, and supports tap selection. Selecting the same day
+again resets the report. Vertical touch scrolling does not trigger selection.
+Keyboard users focus the chart once and use arrows/Home/End to inspect dates,
+Enter/Space to select and Escape to reset. At least one series stays enabled.
+Loading filtered details preserves the chart rather than hiding the report.
+
+```bash
+node tests/test_trend.js
 ```

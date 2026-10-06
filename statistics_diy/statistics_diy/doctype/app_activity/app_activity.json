@@ -1,0 +1,60 @@
+{
+  "doctype": "DocType",
+  "name": "App Activity",
+  "module": "Statistics DIY",
+  "autoname": "hash",
+  "issingle": 0,
+  "fields": [
+    {
+      "fieldname": "project",
+      "label": "Project",
+      "fieldtype": "Link",
+      "options": "Analytics Project"
+    },
+    {
+      "fieldname": "event_id",
+      "label": "Event ID",
+      "fieldtype": "Data",
+      "unique": 1
+    },
+    {
+      "fieldname": "install_id",
+      "label": "Anonymous Install ID",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "occurred_at",
+      "label": "Received At (UTC)",
+      "fieldtype": "Datetime"
+    },
+    {
+      "fieldname": "platform",
+      "label": "Platform",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "app_version",
+      "label": "App Version",
+      "fieldtype": "Data"
+    }
+  ],
+  "field_order": [
+    "project",
+    "event_id",
+    "install_id",
+    "occurred_at",
+    "platform",
+    "app_version"
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "report": 1
+    }
+  ],
+  "engine": "InnoDB"
+}

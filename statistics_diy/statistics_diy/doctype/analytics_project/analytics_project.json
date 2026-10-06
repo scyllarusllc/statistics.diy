@@ -9,7 +9,8 @@
     "website_origin",
     "enabled",
     "collection_key",
-    "tracking_snippet"
+    "tracking_snippet",
+    "app_collection_key"
   ],
   "fields": [
     {
@@ -45,6 +46,13 @@
       "fieldtype": "Code",
       "options": "HTML",
       "read_only": 1
+    },
+    {
+      "fieldname": "app_collection_key",
+      "label": "App Collection Token",
+      "fieldtype": "Data",
+      "read_only": 1,
+      "unique": 1
     }
   ],
   "permissions": [

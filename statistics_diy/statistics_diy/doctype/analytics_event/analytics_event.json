@@ -9,7 +9,15 @@
     "event_id",
     "occurred_at",
     "path",
-    "referrer_host"
+    "referrer_host",
+    "visitor_id",
+    "session_id",
+    "device",
+    "browser",
+    "operating_system",
+    "is_bot",
+    "visitor_timezone",
+    "ip_address"
   ],
   "fields": [
     {
@@ -45,6 +53,48 @@
       "fieldname": "referrer_host",
       "label": "Referrer Host",
       "fieldtype": "Data"
+    },
+    {
+      "fieldname": "visitor_id",
+      "label": "Anonymous Visitor ID",
+      "fieldtype": "Data",
+      "read_only": 1
+    },
+    {
+      "fieldname": "session_id",
+      "label": "Session ID",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "device",
+      "label": "Device",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "browser",
+      "label": "Browser",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "operating_system",
+      "label": "Operating System",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "is_bot",
+      "label": "Detected Bot",
+      "fieldtype": "Check"
+    },
+    {
+      "fieldname": "visitor_timezone",
+      "label": "Visitor Timezone",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "ip_address",
+      "label": "IP Address",
+      "fieldtype": "Data",
+      "read_only": 1
     }
   ],
   "permissions": [

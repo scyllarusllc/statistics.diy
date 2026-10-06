@@ -12,4 +12,6 @@ class AnalyticsProject(Document):
         self.website_origin = f'{origin.scheme}://{origin.netloc}'.rstrip('/')
         if not self.collection_key:
             self.collection_key = secrets.token_urlsafe(32)
+        if not self.app_collection_key:
+            self.app_collection_key = secrets.token_urlsafe(32)
         self.tracking_snippet = f'<script defer src="https://statistics.diy/assets/statistics_diy/js/tracker.js" data-key="{self.collection_key}"></script>'

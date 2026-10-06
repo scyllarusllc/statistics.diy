@@ -8,7 +8,7 @@
     form.elements.project_name.value = button?.dataset.title || '';
     form.elements.website_origin.value = button?.dataset.origin || '';
     form.elements.enabled.checked = button ? button.dataset.enabled === '1' : true;
-    document.getElementById('editor-title').textContent = button ? '编辑项目' : '创建项目';
+    document.getElementById('editor-title').textContent = button ? statisticsT('Edit project') : statisticsT('Create project');
     dialog.showModal();
   }
   document.getElementById('create-project').addEventListener('click', () => open());
@@ -24,7 +24,7 @@
     } catch (error) { status.textContent = error.message; } finally { save.disabled = false; }
   });
   document.querySelectorAll('.copy-snippet').forEach(button => button.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(button.closest('details').querySelector('code').textContent); button.textContent = '已复制'; }
-    catch (_) { document.getElementById('project-status').textContent = '无法自动复制，请选择代码后手动复制。'; }
+    try { await navigator.clipboard.writeText(button.closest('details').querySelector('code').textContent); button.textContent = statisticsT('Copied'); }
+    catch (_) { document.getElementById('project-status').textContent = statisticsT('Unable to copy. Select the code and copy it manually.'); }
   }));
 })();
