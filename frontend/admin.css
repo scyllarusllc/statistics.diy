@@ -1,0 +1,9 @@
+@import "tailwindcss" source(none);
+@source "../statistics_diy/templates";
+@source "../statistics_diy/www";
+@source "../statistics_diy/public/js";
+@layer base {
+  [hidden] { display: none !important; }
+  button, summary { cursor: pointer; }
+  button:disabled { cursor: wait; }
+}

@@ -58,3 +58,20 @@ def summary(project):
         WHERE project=%s AND occurred_at >= %s GROUP BY path ORDER BY views DESC LIMIT 10''',
         (project, start), as_dict=True)
     return {'timezone': 'UTC', 'window': 'Last 30 days', 'total': sum(r.views for r in rows), 'daily': rows, 'pages': pages}
+
+
+@frappe.whitelist(methods=['POST'])
+def save_project(project_name, website_origin, enabled=1, name=None):
+    if 'System Manager' not in frappe.get_roles():
+        frappe.throw('Administrator access is required.', frappe.PermissionError)
+    if name:
+        doc = frappe.get_doc('Analytics Project', name)
+        doc.check_permission('write')
+    else:
+        doc = frappe.new_doc('Analytics Project')
+        doc.check_permission('create')
+    doc.project_name = (project_name or '').strip()
+    doc.website_origin = (website_origin or '').strip()
+    doc.enabled = frappe.utils.cint(enabled)
+    doc.save()
+    return {'name': doc.name}

@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="{{ csrf_token | e }}"><title>{{ title | e }} · Statistics DIY</title><link rel="stylesheet" href="/assets/statistics_diy/css/admin.css?v=20261006-dialog"></head>
+<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
+<header class="border-b border-slate-200 bg-white"><div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-5"><a href="/statistics_diy/admin/dashboard" class="text-xl font-bold tracking-tight">Statistics<span class="text-indigo-600"> DIY</span></a>{% if not is_login %}<nav class="flex items-center gap-5 text-sm font-medium" aria-label="主导航"><a class="hover:text-indigo-600" href="/statistics_diy/admin/dashboard">仪表盘</a><a class="hover:text-indigo-600" href="/statistics_diy/admin/projects">项目</a><button id="logout" class="text-slate-500 hover:text-indigo-600">退出</button></nav>{% endif %}</div></header>
+<main class="mx-auto max-w-6xl px-6 py-10">{% block content %}{% endblock %}</main>
+<footer class="mx-auto max-w-6xl px-6 py-8 text-xs text-slate-500">Your websites. Your apps. Your statistics.</footer>
+<script src="/assets/statistics_diy/js/admin.js?v=20261006"></script>{% block scripts %}{% endblock %}
+</body></html>

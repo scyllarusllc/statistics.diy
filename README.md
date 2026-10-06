@@ -206,12 +206,13 @@ MIT is the proposed license. A license file and copyright attribution will be ad
 ## First analytics workflow
 
 The app now includes **Analytics Project**, **Analytics Event**, a page-view tracker,
-and a Desk page at `/app/analytics` (System Manager access).
+and custom Tailwind CSS pages at `/statistics_diy/admin/dashboard` and
+`/statistics_diy/admin/projects` (System Manager access).
 
-1. Open `/app/analytics` and select **Create Project**.
+1. Sign in at `/statistics_diy/login`, open `/statistics_diy/admin/projects` and select **创建项目**.
 2. Enter the project name and exact website origin, e.g. `https://example.com`.
-3. Save and copy **Tracking Snippet** into the website's HTML.
-4. Choose the project on `/app/analytics` to see page views, daily totals and top paths.
+3. Save and expand **获取追踪代码**, then copy the snippet into the website's HTML.
+4. Choose the project on `/statistics_diy/admin/dashboard` to see page views, daily totals and top paths.
 
 The current snippet uses `https://statistics.diy` as the collector host. For another
 installation, adjust the script URL. Collection keys are public project identifiers,
@@ -240,3 +241,25 @@ bench --site statistics.localhost execute statistics_diy.verify.run
 
 This verification includes an HTTP request through `https://statistics.diy`; adapt
 that URL when validating another deployment.
+
+### Custom administration UI
+
+Login, projects (including creation/editing), and the dashboard use standalone
+HTML templates, vanilla JavaScript and compiled Tailwind CSS. They do not load
+Frappe UI styles/scripts or link to Desk. Frappe supplies sessions, CSRF protection,
+permissions and database operations.
+
+Rebuild the committed CSS after changing templates or Tailwind classes (Node 20+):
+
+```bash
+npm ci
+npm run build:css
+```
+
+Verify the administration pages and project editor inside Bench:
+
+```bash
+bench --site statistics.localhost execute statistics_diy.verify.dashboard
+bench --site statistics.localhost execute statistics_diy.verify.projects
+bench --site statistics.localhost execute statistics_diy.verify.project_editor
+```

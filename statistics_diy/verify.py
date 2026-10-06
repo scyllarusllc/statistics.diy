@@ -53,3 +53,108 @@ def run():
         frappe.db.commit()
         frappe.get_request_header = original_header
         frappe.set_user(previous)
+
+
+def dashboard():
+    from statistics_diy.www.statistics_diy.admin.dashboard import get_context
+    previous = frappe.session.user
+    try:
+        frappe.set_user('Administrator')
+        frappe.session.data.csrf_token = 'verification-token'
+        context = frappe._dict()
+        get_context(context)
+        from frappe.website.page_renderers.template_page import TemplatePage
+        html = TemplatePage('statistics_diy/admin/dashboard').get_html()
+        assert 'Statistics DIY' in html
+        assert '/assets/frappe' not in html
+        assert '/app/' not in html
+        assert '/assets/statistics_diy/js/dashboard.js' in html
+        print('Administrator dashboard controller and template passed.')
+        frappe.set_user('Guest')
+        try:
+            get_context(frappe._dict())
+        except frappe.Redirect:
+            print('Guest login redirect passed.')
+        else:
+            raise AssertionError('Guest was allowed into dashboard')
+    finally:
+        frappe.set_user(previous)
+
+
+def projects():
+    from statistics_diy.www.statistics_diy.admin.projects import get_context
+    from frappe.website.page_renderers.template_page import TemplatePage
+    previous = frappe.session.user
+    try:
+        frappe.set_user('Administrator')
+        frappe.session.data.csrf_token = 'verification-token'
+        empty_html = TemplatePage('statistics_diy/admin/projects').get_html()
+        assert '统计项目' in empty_html
+        project = frappe.get_doc({'doctype': 'Analytics Project',
+            'project_name': '<script>test</script>', 'website_origin': 'https://example.com'}).insert()
+        frappe.db.set_value('Analytics Project', project.name, 'project_name', '<script>test</script>')
+        html = TemplatePage('statistics_diy/admin/projects').get_html()
+        assert '&lt;script&gt;test&lt;/script&gt;' in html
+        assert '<script>test</script>' not in html
+        assert '&lt;script defer' in html
+        assert '?project=' + project.name in html
+        assert '采集已启用' in html
+        print('Projects page renders and escapes project names and tracking snippets.')
+        frappe.set_user('Guest')
+        try:
+            get_context(frappe._dict())
+        except frappe.Redirect:
+            assert frappe.local.flags.redirect_location.endswith('/statistics_diy/admin/projects')
+            print('Guest redirected to login.')
+        else:
+            raise AssertionError('Guest was allowed into projects')
+        frappe.set_user('Guest')
+        original_roles = frappe.get_roles
+        try:
+            frappe.session.user = 'unprivileged-test'
+            frappe.get_roles = lambda: ['Website User']
+            try:
+                get_context(frappe._dict())
+            except frappe.PermissionError:
+                print('Non-administrator access rejected.')
+            else:
+                raise AssertionError('Non-administrator was allowed into projects')
+        finally:
+            frappe.get_roles = original_roles
+    finally:
+        frappe.db.rollback()
+        frappe.set_user(previous)
+
+
+def project_editor():
+    from statistics_diy.api import save_project
+    previous = frappe.session.user
+    try:
+        frappe.set_user('Administrator')
+        result = save_project('Editor verification', 'https://example.com', 1)
+        name = result['name']
+        key = frappe.db.get_value('Analytics Project', name, 'collection_key')
+        assert key
+        save_project('Updated project', 'https://updated.example', 0, name)
+        doc = frappe.get_doc('Analytics Project', name)
+        assert doc.project_name == 'Updated project'
+        assert doc.website_origin == 'https://updated.example'
+        assert doc.enabled == 0
+        assert doc.collection_key == key
+        try:
+            save_project('Bad origin', 'https://example.com/private', 1)
+        except frappe.ValidationError:
+            pass
+        else:
+            raise AssertionError('Invalid website origin accepted')
+        frappe.set_user('Guest')
+        try:
+            save_project('Unauthorized project', 'https://example.com', 1)
+        except frappe.PermissionError:
+            pass
+        else:
+            raise AssertionError('Guest could create a project')
+        print('Project create, edit, validation, key preservation and authorization passed.')
+    finally:
+        frappe.db.rollback()
+        frappe.set_user(previous)

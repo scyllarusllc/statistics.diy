@@ -1,0 +1,11 @@
+{
+  "name": "statistics-diy-ui",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i frontend/admin.css -o statistics_diy/public/css/admin.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}
