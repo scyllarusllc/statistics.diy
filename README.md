@@ -6,6 +6,40 @@ Self-hosted website and app analytics for independent developers.
 
 Project domain: `statistics.diy`
 
+## Screenshots
+
+Captured from [statistics.diy](https://statistics.diy/) on October 6, 2026.
+
+### Home
+
+![Statistics DIY home page](screenshots/home.jpg)
+
+### Dashboard overview
+
+The dashboard screenshot shows the overview controls and summary cards; visitor IP addresses and visit details are outside the captured area.
+
+![Statistics DIY dashboard overview](screenshots/dashboard.jpg)
+
+### Traffic sources
+
+Popular pages and referral sources.
+
+![Statistics DIY traffic sources](screenshots/traffic-sources.jpg)
+
+### Audience
+
+Device, browser, and operating system breakdowns, excluding the IP address table.
+
+![Statistics DIY audience breakdowns](screenshots/audience.jpg)
+
+### App activity
+
+Daily and monthly active installs, retained installs, and stored app pings. This screenshot shows the current empty state.
+
+![Statistics DIY app activity](screenshots/app-activity.jpg)
+
+These additional screenshots were captured on October 7, 2026.
+
 ## One-line installation
 
 On Linux or macOS with **Docker running and Docker Compose v2 installed**:
