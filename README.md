@@ -38,6 +38,12 @@ Daily and monthly active installs, retained installs, and stored app pings. This
 
 ![Statistics DIY app activity](screenshots/app-activity.jpg)
 
+### Project trends
+
+Daily unique visitors per project, one colored line per project.
+
+![Statistics DIY project trends](https://pastebloom.com/i/MlOhmLttpZ.png)
+
 These additional screenshots were captured on October 7, 2026.
 
 ## One-line installation
