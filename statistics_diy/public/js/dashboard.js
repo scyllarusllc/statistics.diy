@@ -158,6 +158,78 @@
     link.href = url; link.download = `statistics-${select.value || "all-projects"}-${report.start}-${report.end}.csv`;
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
+  const trendColors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#84cc16'];
+  function projectTrend(series, rows) {
+    const target = document.getElementById('project-trend-chart');
+    const legend = document.getElementById('project-trend-legend');
+    const tooltip = document.getElementById('project-trend-tooltip');
+    target.replaceChildren(); legend.replaceChildren();
+    const ns = 'http://www.w3.org/2000/svg';
+    const styles = series.map((item, index) => ({color: trendColors[index % trendColors.length], dash: index >= trendColors.length ? '5 4' : null}));
+    series.forEach((item, index) => {
+      const entry = document.createElement('li'); entry.className = 'flex min-w-0 items-center gap-2 text-slate-600';
+      const swatch = document.createElement('span'); Object.assign(swatch.style, {display: 'inline-block', width: '20px', height: '4px', flex: 'none', borderRadius: '2px', background: styles[index].color});
+      const name = document.createElement('span'); name.className = 'truncate'; name.textContent = item.project_name; name.title = item.project_name; entry.append(swatch, name); legend.append(entry);
+    });
+    const maximum = Math.max(1, ...series.flatMap(item => item.visitors.map(value => value || 0)));
+    const step = maximum > 20 ? 10 : 1; const ceiling = Math.ceil(maximum / step) * step;
+    const width = 880 / Math.max(1, rows.length);
+    const x = index => 10 + (index + 0.5) * width;
+    const y = value => 210 - (value || 0) / ceiling * 200;
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 900 220'); svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', statisticsT('Unique visitors by project'));
+    svg.classList.add('w-full', 'h-[220px]', 'outline-none'); svg.style.touchAction = 'pan-y'; svg.style.cursor = 'crosshair';
+    for (const fraction of [0, 0.5, 1]) {
+      const line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', '10'); line.setAttribute('x2', '890');
+      line.setAttribute('y1', 210 - fraction * 200); line.setAttribute('y2', 210 - fraction * 200);
+      line.setAttribute('stroke', '#e2e8f0'); line.setAttribute('stroke-dasharray', '3 5'); svg.append(line);
+      const label = document.createElement('span'); label.className = 'absolute left-0 text-[10px] tabular-nums text-slate-400';
+      label.style.top = (210 - fraction * 200 - 6) + 'px'; label.textContent = Math.round(ceiling * fraction); target.append(label);
+    }
+    series.forEach((item, index) => {
+      const path = document.createElementNS(ns, 'path'); let connected = false; const segments = [];
+      item.visitors.forEach((value, day) => {
+        if (value == null) { connected = false; return; }
+        segments.push(`${connected ? 'L' : 'M'} ${x(day)} ${y(value)}`); connected = true;
+      });
+      path.setAttribute('d', segments.join(' ')); path.setAttribute('fill', 'none'); path.setAttribute('stroke', styles[index].color);
+      path.setAttribute('stroke-width', '2'); path.setAttribute('vector-effect', 'non-scaling-stroke');
+      if (styles[index].dash) path.setAttribute('stroke-dasharray', styles[index].dash);
+      svg.append(path);
+    });
+    const guide = document.createElementNS(ns, 'line'); guide.setAttribute('y1', '10'); guide.setAttribute('y2', '210');
+    guide.setAttribute('stroke', '#94a3b8'); guide.setAttribute('stroke-dasharray', '4 4'); guide.style.display = 'none'; svg.append(guide);
+    const dots = series.map((item, index) => {
+      const point = document.createElementNS(ns, 'circle'); point.setAttribute('r', '4');
+      point.setAttribute('fill', styles[index].color); point.setAttribute('stroke', 'white'); point.setAttribute('stroke-width', '2');
+      point.style.display = 'none'; svg.append(point); return point;
+    });
+    target.append(svg);
+    const dates = document.createElement('div'); dates.className = 'mt-2 flex justify-between pl-1 text-[10px] tabular-nums text-slate-400';
+    for (const index of [0, Math.floor((rows.length - 1) / 2), rows.length - 1]) {
+      const label = document.createElement('span'); label.textContent = rows[index]?.day || ''; dates.append(label);
+    }
+    target.append(dates);
+    const reset = () => {
+      guide.style.display = 'none'; dots.forEach(dot => { dot.style.display = 'none'; });
+      tooltip.textContent = statisticsT('Move across the chart to compare projects.');
+    };
+    svg.addEventListener('pointermove', event => {
+      const bounds = svg.getBoundingClientRect();
+      const position = (event.clientX - bounds.left) / Math.max(1, bounds.width) * 900;
+      const index = Math.max(0, Math.min(rows.length - 1, Math.floor((position - 10) / width)));
+      guide.setAttribute('x1', x(index)); guide.setAttribute('x2', x(index)); guide.style.display = '';
+      series.forEach((item, seriesIndex) => {
+        const value = item.visitors[index]; const dot = dots[seriesIndex];
+        dot.style.display = value == null ? 'none' : ''; dot.setAttribute('cx', x(index)); dot.setAttribute('cy', y(value));
+      });
+      tooltip.textContent = rows[index].day + ' · UTC · ' + series.map(item => `${item.project_name}: ${item.visitors[index] ?? '—'}`).join(' · ');
+    });
+    svg.addEventListener('pointerleave', reset);
+    reset();
+  }
   function ipCell(row) {
     const container = document.createElement('span'); container.className = 'block whitespace-nowrap';
     const location = [row.country_flag, row.city || (row.country_name !== 'Unknown' ? row.country_name : '')].filter(Boolean).join(' ');
@@ -212,6 +284,7 @@
       if (!response.ok) throw new Error('Request failed');
       let {message: data} = await response.json();
       const trend = data.daily;
+      const projectTrends = data.project_trends;
       if (selectedDay) {
         const detail = await fetch('/api/method/statistics_diy.api.summary?project=' + encodeURIComponent(select.value) + '&days=' + range.value + '&exclude_bots=' + Number(document.getElementById('exclude-bots').checked) + '&day=' + selectedDay, {credentials: 'same-origin'});
         if (!detail.ok) throw new Error('Request failed');
@@ -226,6 +299,7 @@
       document.getElementById('report-period').textContent = `${data.start} — ${data.end} · UTC · ${statisticsT('Data available since:')} ${data.retention_start}`;
       chartRows = trend;
       chart(chartRows);
+      projectTrend(projectTrends, trend);
       document.getElementById('event-summary').textContent = data.stored_events + ' ' + statisticsT('events stored') + ' · ' + data.bot_hits + ' ' + statisticsT('detected bot hits in range') + ' · ' + data.retention_days + ' ' + statisticsT('days retained');
       document.getElementById('returning-visitors').textContent = data.returning + ' / ' + data.visitors;
       document.getElementById('today-statistics').textContent = data.today.views + ' / ' + data.today.visitors;

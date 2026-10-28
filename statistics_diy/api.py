@@ -117,6 +117,12 @@ def summary(project=None, days=30, exclude_bots=1, day=None):
         if not row['available']:
             row['views'] = None
             row['visitors'] = None
+    source, identity_params = visitor_source(where, params, 'day')
+    trend_rows = frappe.db.sql(f'''SELECT project, DATE(occurred_at) AS day, COUNT(DISTINCT NULLIF(effective_visitor, '')) AS visitors
+        FROM {source} WHERE {where} GROUP BY project, DATE(occurred_at)''', identity_params, as_dict=True)
+    trend_counts = {(row.project, str(row.day)): row.visitors for row in trend_rows}
+    project_trends = [{'name': item.name, 'project_name': item.project_name,
+        'visitors': [trend_counts.get((item.name, row['day']), 0) if row['available'] else None for row in daily]} for item in projects]
     source, identity_params = visitor_source(where, params, 'path')
     pages = frappe.db.sql(f'''SELECT project, path, COUNT(*) AS views, COUNT(DISTINCT project, NULLIF(effective_visitor, '')) AS visitors FROM {source}
         WHERE {where}
@@ -145,7 +151,7 @@ def summary(project=None, days=30, exclude_bots=1, day=None):
     identified_views = sum(int(row.views) - int(row.unmeasured) for row in totals)
     return {**extra, 'ip_visitors': ip_visitors, 'ip_fallback_views': ip_views, 'identified_views': identified_views, 'visitor_count_complete': not any(row.unmeasured for row in totals), 'selected_day': day, 'visitors': sum(row.visitors for row in totals), 'unmeasured_views': sum(row.unmeasured for row in totals), 'projects': project_rows, 'all_projects': not bool(project), 'timezone': 'UTC' , 'window': f'Last {days} days', 'days': days,
         'retention_start': cutoff.date().isoformat(), 'start': start.date().isoformat(), 'end': (end - timedelta(days=1)).date().isoformat(),
-        'total': sum(row['views'] or 0 for row in daily), 'daily': daily, 'pages': pages, 'referrers': referrers}
+        'total': sum(row['views'] or 0 for row in daily), 'daily': daily, 'project_trends': project_trends, 'pages': pages, 'referrers': referrers}
 
 
 @frappe.whitelist(methods=['POST'])

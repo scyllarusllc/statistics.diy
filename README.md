@@ -94,6 +94,7 @@ Existing projects such as [Umami](https://docs.umami.is/docs/about) and [Plausib
 - Popular pages and referral sources.
 - Country, browser, operating system, and device breakdowns.
 - Daily trends with explicit reporting timezone and retention boundaries.
+- Per-project daily unique visitor trend lines, one color per project, at the top of the dashboard overview.
 - Integration through a lightweight JavaScript snippet.
 
 ### App analytics
