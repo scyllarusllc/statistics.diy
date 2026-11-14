@@ -54,11 +54,7 @@ On Linux or macOS with **Docker running and Docker Compose v2 installed**:
 curl -fsSL https://raw.githubusercontent.com/scyllarusllc/statistics.diy/main/install.sh | bash
 ```
 
-This builds and starts Frappe version 16, MariaDB, Redis, workers, and Statistics DIY in a dedicated Docker Compose stack. It creates the `statistics.localhost` site and installs `statistics_diy`; no existing Bench is modified. Docker itself is a prerequisite and is not installed by this script.
-
-Open **http://localhost:8080** and sign in as **Administrator**. The generated password is the `ADMIN_PASSWORD` value in `~/.local/share/statistics-diy/.env`. This file is created with private permissions; it is preserved on retries. The installation currently opens the Frappe login/Desk, not a finished analytics dashboard.
-
-The initial image build can take several minutes and requires enough disk space for the Frappe build and its containers. Docker must support BuildKit secrets. The build uses a [pinned official Frappe Docker recipe](https://github.com/frappe/frappe_docker/tree/f71a386bc13f75dcc0cf7462f025f531576a04fc); Frappe's `version-16` branch and the app's `main` branch track their current code.
+This builds a small Node.js image and starts it with a SQLite database in a dedicated Docker Compose stack. Open **http://localhost:8080** and sign in as **Administrator**. The generated password is the `ADMIN_PASSWORD` value in `~/.local/share/statistics-diy/.env` (created with private permissions and preserved on retries). Only its Argon-style scrypt hash, `ADMIN_PASSWORD_HASH`, is given to the container.
 
 To choose a different port and installation directory:
 
@@ -66,9 +62,7 @@ To choose a different port and installation directory:
 curl -fsSL https://raw.githubusercontent.com/scyllarusllc/statistics.diy/main/install.sh | STATISTICS_DIY_PORT=8081 STATISTICS_DIY_DIR="$HOME/statistics-diy-server" bash
 ```
 
-These settings apply on first installation. Reruns reuse the existing `.env` and persistent database/site volumes. The installer manages one stack named `statistics-diy` per Docker daemon. It does not support multiple instances or upgrades of established deployments yet. If an installation is interrupted, rerun the same command; do not delete database volumes to retry.
-
-Manage the default installation:
+These settings apply on first installation. Reruns reuse the existing `.env` and the persistent `data` volume. Manage the default installation:
 
 ```bash
 cd ~/.local/share/statistics-diy
@@ -78,11 +72,27 @@ docker compose stop
 docker compose start
 ```
 
-The web port binds to localhost. Public deployment requires a reverse proxy with HTTPS, appropriate host/proxy settings, and a backup plan. Domain hosting and TLS are not configured by this installer.
+The web port binds to localhost. Public deployment requires a reverse proxy with HTTPS (set `APP_ORIGIN` to the public origin) and a backup plan. To back up, stop the stack and copy `statistics.sqlite*` out of the `data` volume.
+
+## Migrating from Frappe
+
+Earlier versions ran on Frappe and MariaDB. The Node.js version imports that data without changing anything on your websites: the tracker URL (`/assets/statistics_diy/js/tracker.js`), the collection endpoint (`/api/method/statistics_diy.api.collect`) and every project's `data-key` stay the same, and project IDs, collection keys, app tokens, event IDs and the anonymized visitor/session/install hashes are copied verbatim.
+
+1. Start the new service and keep the old MariaDB reachable.
+2. Run the importer with any command that feeds SQL on stdin to the old database:
+
+```bash
+node scripts/migrate.mjs --to /absolute/path/statistics.sqlite \
+  --from-mariadb 'docker exec -i OLD_DB_CONTAINER mariadb -uroot -pOLD_PASSWORD OLD_SITE_DATABASE'
+```
+
+The old site's database name is in `sites/<site>/site_config.json` (`db_name`). The importer backs up an existing target, imports in one transaction, is safe to re-run (existing rows are skipped), and prints source and target counts per table. Stop the old service, switch DNS or the reverse proxy to the new one, and rerun the importer once to pick up events collected in between. Retention (`Analytics Settings`) is imported too. In Docker, run it against the `data` volume, e.g. `docker compose run --rm -v "$PWD/import:/import" app node scripts/migrate.mjs --to /data/statistics.sqlite --from-mariadb '...'` with network access to the old database.
+
+The administrator account is no longer a Frappe user; set `ADMIN_PASSWORD_HASH` (`node scripts/hash-password.mjs 'password'`).
 
 ## Status
 
-`statistics_diy` is an independent Frappe app. The first website analytics slice includes projects, page-view collection, a tracking script and a basic Desk report. App analytics and advanced reporting remain to be implemented.
+Statistics DIY is a Node.js (22.13+) application with a built-in SQLite database (`node:sqlite`). Projects, page-view and app-activity collection, the dashboard, retention and exports described below are implemented.
 
 ## Why this project exists
 
@@ -116,7 +126,7 @@ Existing projects such as [Umami](https://docs.umami.is/docs/about) and [Plausib
 - Multiple websites and apps in one instance.
 - Project-scoped collection credentials and isolated reporting data.
 - Administrator authentication and project access controls.
-- One-line Docker installation or installation on an existing Frappe Bench.
+- One-line Docker installation or running the Node.js app directly.
 - Setup documentation and synthetic demonstration data.
 
 Session replay, experiments, advertising attribution, and payment processing are outside the first release scope.
@@ -143,107 +153,44 @@ Session replay, experiments, advertising attribution, and payment processing are
 
 Exact collection defaults and retention periods will be documented as the implementation develops.
 
-## Version-one architecture
+## Architecture
 
-- **Framework:** Frappe, as a standalone app with no dependency on VibeCMS or ERPNext.
-- **App/package name:** `statistics_diy`, avoiding a collision with Python's standard-library `statistics` module.
-- **Collector:** Frappe HTTP endpoints accepting website and app events through a documented, framework-neutral protocol.
-- **Database:** the database supported by the target Frappe Bench, initially MariaDB in the existing development environment. PostgreSQL is not a version-one requirement.
-- **Data model:** project-scoped DocTypes for projects, events, anonymous installs, daily activity, and reporting aggregates. Detailed schemas remain to be implemented.
-- **Dashboard:** Frappe-backed analytics pages with authentication and project access controls.
-- **Background work:** Frappe queues and scheduler for aggregation and retention tasks.
-- **Deployment:** the one-line Docker installer, or an existing Frappe Bench.
+- **Runtime:** Node.js 22.13+ with no web framework; `server.mjs` routes requests, `src/` holds collection, reporting and auth logic.
+- **Database:** SQLite through the built-in `node:sqlite` module (`src/db.mjs` creates and versions the schema). Tables: `projects`, `events`, `visitors`, `app_activity`, `settings`, `admin_sessions`.
+- **Collector:** `POST /api/method/statistics_diy.api.collect` (websites) and `POST /api/method/statistics_diy.activity.ping` (apps). The path names are kept for compatibility with trackers already deployed.
+- **Dashboard:** server-rendered Nunjucks templates in `views/`, vanilla JavaScript and compiled Tailwind CSS in `public/`, served at `/assets/statistics_diy/`.
+- **Authentication:** one administrator (`ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH`), cookie sessions stored hashed in SQLite, CSRF token on every state-changing request.
+- **Background work:** an in-process timer purges data past the retention period.
+- **GeoIP:** optional offline `.mmdb` database through the `maxmind` package (`STATISTICS_GEOIP_DATABASE`).
 
-Frappe supplies the initial application foundation, permissions, migrations, and background jobs. Collection clients do not need Frappe: ordinary websites and desktop/mobile apps will submit events over HTTP. VibeCMS will be one such client.
+Collection validation and aggregation live in `src/` separately from page rendering. A separate collector or analytics database can be introduced later if measured traffic justifies it.
 
-Keep collection validation and aggregation logic separate from page rendering and framework adapters. Frequently refreshed dashboards should use bounded queries and appropriate aggregates instead of recalculating every report on every refresh.
+## Local development
 
-A separate collector or analytics database can be introduced later if measured traffic and query performance justify it. This is an extension path, not a first-release requirement.
-
-## Install the app skeleton
-
-### Local development with Make
-
-With Docker running and Docker Compose v2 installed:
+Requires Node.js 22.13 or newer.
 
 ```bash
-make dev
+cp .env.example .env     # set ADMIN_PASSWORD_HASH using scripts/hash-password.mjs
+make dev                 # npm install && node --watch server.mjs
 ```
 
-The first run builds a development image with Python 3.14, Node 24, Yarn,
-Redis, and Bench, initializes a separate Frappe `version-16` Bench, creates
-`statistics.localhost`, installs this checkout, enables developer mode, and
-finally runs `bench start` in the foreground inside the container. The current
-source directory is mounted and linked into Bench so edits use your local code.
-The version requirements follow the [Frappe installation guide](https://docs.frappe.io/framework/user/en/installation).
-Docker itself must already be installed and accessible to your user.
-
-Open **http://localhost:8000** and log in as **Administrator** with password
-**statistics-dev-admin**. These fixed credentials are only for local development;
-the web and Socket.IO ports bind to localhost and the database has no published
-port. Open `/app/analytics` in Frappe Desk for the initial page-view report.
-
-Press Ctrl+C to stop Bench. Rerun `make dev` to reuse the Bench, site, and database
-stored in Docker volumes. Run `make dev-stop` to stop the development stack while
-preserving those volumes. This uses a separate Compose project from `install.sh`.
-Do not run two `make dev` sessions at once. Before building, `make dev` checks
-both host ports. If a port is occupied, it shows the listener and asks
-`Stop these listeners and continue? [y/N]`. Confirming stops the owning Docker
-container (preserving its volumes) or sends SIGTERM to the host process, then
-waits for the port to become free. Declining or running without input cancels
-startup. It never forces a kill. Port checks require `ss` or `lsof`. On Linux, files generated in the
-mounted checkout belong to container UID 1000; your user may need to adjust their
-ownership before editing them.
-
-To use different host ports:
-
-```bash
-STATISTICS_DIY_DEV_PORT=8001 STATISTICS_DIY_DEV_SOCKETIO_PORT=9001 make dev
-```
-
-First-time setup requires network access and can take several minutes. If setup
-fails, `bench start` is not run; retry after resolving the reported error. An
-incomplete initial Bench clone or virtual environment requires inspection of the
-development volume before retrying; the script does not delete existing data.
-
-### Existing Bench
-
-From an existing, compatible Frappe Bench, install this local checkout:
-
-```bash
-bench get-app /absolute/path/to/statistics.diy
-bench --site your-site.example install-app statistics_diy
-bench --site your-site.example list-apps
-```
-
-For this checkout, the local path is `~/github/statistics.diy`. Use a development site for the initial installation. Installing the skeleton registers the app and its module; it does not provide analytics features yet.
-
-The package requires Python 3.10 or newer. The selected Frappe release may require a newer Python version. A supported Frappe version matrix will be published after installation and migration checks on a development site.
-
-## Development roadmap
-
-1. Specify event schemas, anonymous identities, project isolation, metric definitions, and retention rules.
-2. Implement Frappe DocTypes and collection endpoints with validation, rate limiting, and retry deduplication.
-3. Add the website snippet and an app integration example.
-4. Build dashboards for website traffic and app activity with correct historical trends.
-5. Configure Frappe roles and project permissions; add deployment instructions, migrations, and synthetic demo data.
-6. Validate using the Pomatez website and app, without publishing their production analytics.
-7. Publish the first open-source release once deployment and metric accuracy are verified.
+Open **http://127.0.0.1:8080**. Environment variables: `PORT`, `BINDING`, `APP_ORIGIN`, `DATABASE_PATH`, `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` (or `ADMIN_PASSWORD` for development only), `STATISTICS_PROXY_TOKEN`, `STATISTICS_GEOIP_DATABASE`. Behind a trusted proxy, send the visitor address in `X-Statistics-Client-IP` together with `X-Statistics-Proxy-Token`; other forwarding headers are ignored.
 
 ## Development checks
 
-Meaningful verification should cover project isolation, event validation, retry behavior, timezone boundaries, daily/monthly distinct counts, retention boundaries, and period ping totals.
-
-The app is installed on the development Frappe site. The analytics integration verification command is documented below.
-
-Installer contract checks can be run without Docker:
-
 ```bash
-python3 -m unittest discover -s tests -v
+npm test
 bash -n install.sh
 ```
 
-These tests simulate downloads and Docker commands. They verify installation order, private credential files, retries, and input validation; they do not validate a running Frappe deployment. A full Docker build and site startup have not yet been verified.
+The tests cover collection, deduplication, origin checks, project isolation, admin sessions and CSRF, report windows, the unchanged tracker script path, tracker behavior and dashboard chart interactions.
+
+Rebuild the committed CSS after changing templates or Tailwind classes:
+
+```bash
+npm run build:css
+```
+
 
 ## License
 
@@ -253,7 +200,7 @@ MIT is the proposed license. A license file and copyright attribution will be ad
 
 The app now includes **Analytics Project**, **Analytics Event**, a page-view tracker,
 and custom Tailwind CSS pages at `/statistics_diy/admin/dashboard` and
-`/statistics_diy/admin/projects` (System Manager access).
+`/statistics_diy/admin/projects` (administrator access).
 
 1. Sign in at `/statistics_diy/login`, open `/statistics_diy/admin/projects` and select **创建项目**.
 2. Enter the project name and exact website origin, e.g. `https://example.com`.
@@ -272,18 +219,7 @@ app activity, country/device reports and automated retention are not
 implemented. Reports cover selectable 7/30/90 UTC calendar days, including today; events currently remain stored
 until explicitly deleted. Collection is capped at 1,000 requests per project per minute.
 
-Apply schema and asset changes in a Bench using:
 
-```bash
-bench --site statistics.localhost migrate
-bench build --app statistics_diy
-```
-
-Integration verification creates temporary projects and events and removes them:
-
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.run
-```
 
 This verification includes an HTTP request through `https://statistics.diy`; adapt
 that URL when validating another deployment.
@@ -291,9 +227,7 @@ that URL when validating another deployment.
 ### Custom administration UI
 
 Login, projects (including creation/editing), and the dashboard use standalone
-HTML templates, vanilla JavaScript and compiled Tailwind CSS. They do not load
-Frappe UI styles/scripts or link to Desk. Frappe supplies sessions, CSRF protection,
-permissions and database operations.
+HTML templates, vanilla JavaScript and compiled Tailwind CSS. The Node.js server supplies sessions, CSRF protection, permissions and database operations.
 
 Rebuild the committed CSS after changing templates or Tailwind classes (Node 20+):
 
@@ -302,13 +236,6 @@ npm ci
 npm run build:css
 ```
 
-Verify the administration pages and project editor inside Bench:
-
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.dashboard
-bench --site statistics.localhost execute statistics_diy.verify.projects
-bench --site statistics.localhost execute statistics_diy.verify.project_editor
-```
 
 ### Report ranges and exports
 
@@ -318,21 +245,12 @@ are excluded. Page and referral tables include the top 10 entries. Empty referre
 are labelled Direct / Unknown. The CSV includes daily totals and both top-10 tables
 for the selected project and date range; it is not a raw event export.
 
-Verify report boundaries and aggregation:
-
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.reports
-```
 
 The dashboard defaults to **All projects**, showing combined page views and daily
 traffic plus a total for every project, including projects with zero traffic or
 collection disabled. Select a project or click its summary row for details.
 Combined top pages remain separated by project even when paths match. CSV exports
 include project totals and identify the project for each top-page entry.
-
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.all_projects
-```
 
 ### Unique visitor estimates
 
@@ -354,10 +272,6 @@ The tracker uses a stable, unversioned URL. The reverse proxy must send
 revalidate it on each page load. Existing versioned URLs continue to work. Add `data-visitors="off"` to the script to disable
 visitor storage while still counting page views. Do Not Track and Global Privacy
 Control disable both collection and visitor storage.
-
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.visitors
-```
 
 ### Visitor details and app analytics
 
@@ -395,20 +309,12 @@ merely by adding this control.
 
 Verification uses temporary data and rolls changes back:
 
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.advanced
-```
-
 The traffic trend supports visible hover/focus tooltips, views/visitor series
 checkboxes, and clickable day selection. Selecting a retained day filters website
 report totals, tables and exports while keeping the full-range trend visible.
 **Back to full range** clears the selection. Arrow keys, Home/End and Enter/Space
 navigate and select days. Dates outside retention cannot be selected. Today's
 counters and app DAU/MAU retain their explicitly labelled time windows.
-
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.trend_interactions
-```
 
 ### IP addresses
 
@@ -419,16 +325,12 @@ same retention and clear-data controls as other website events. App pings do not
 store IPs. Location lookup remains unconfigured.
 
 The current Caddy proxy overwrites `X-Statistics-Client-IP` and authenticates that
-header to Frappe using `X-Statistics-Proxy-Token`, matched against the private
-`statistics_proxy_token` site configuration. It accepts `CF-Connecting-IP` only
+header to the app using `X-Statistics-Proxy-Token`, matched against the private
+`STATISTICS_PROXY_TOKEN` environment variable. It accepts `CF-Connecting-IP` only
 from Cloudflare's published network ranges; other requests use the direct peer
 address. Unauthenticated forwarded headers are ignored by the app. Future proxy
 deployments must configure the same trust boundary rather than passing arbitrary
 client headers. Keep the proxy token private and Cloudflare ranges current.
-
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.ip_addresses
-```
 
 ### Country flags
 
@@ -437,28 +339,17 @@ Lookups run locally against DB-IP Country Lite; no visitor IP is sent to a looku
 service. Private, invalid or unknown addresses have no flag. Country assignments
 are approximate and based on the current database, including for historical IPs.
 
-The deployed October 2026 database is stored in the persistent development volume
-at `/workspace/geoip/country.mmdb`. It is not included in this repository. For another
-installation, provide a current MMDB file and set `statistics_geoip_database` in
-site configuration (or `STATISTICS_GEOIP_DATABASE` in the environment). Refresh the
+The offline database is read from `/data/geoip/city.mmdb` or `/data/geoip/country.mmdb` (inside the `data` volume). It is not included in this repository. For another
+installation, provide a current MMDB file and set `STATISTICS_GEOIP_DATABASE` in
+the environment. Refresh the
 file periodically using DB-IP's monthly release. The dashboard includes the required
 [DB-IP attribution](https://db-ip.com/db/download/ip-to-country-lite).
-
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.country_flags
-```
 
 ### Public homepage
 
 `/statistics_diy/user/homepage` is the custom Tailwind homepage and is also served
-at `/`. Guests can sign in; administrators get dashboard and project links. The
-root is pinned to this page even when a Frappe workspace defines another homepage.
-Existing administration and collection routes continue through normal routing.
+at `/`. Guests can sign in; administrators get dashboard and project links. 
 The homepage supports the same English/Chinese preference as the rest of the site.
-
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.homepage
-```
 
 ### Unique-count coverage and cached trackers
 
@@ -494,18 +385,12 @@ The card reports extra visitors estimated from unmatched IPs, views using fallba
 and views lacking both identifiers. Events lacking both stay unavailable; historical
 records are not rewritten. Visitor labels remain tied to explicit browser IDs.
 
-```bash
-bench --site statistics.localhost execute statistics_diy.verify.ip_fallback
-```
-
 Country flags also show the estimated city beside the IP; hover reveals the region
-and country. Lookups prefer `/workspace/geoip/city.mmdb` when available, falling
+and country. Lookups prefer `/data/geoip/city.mmdb` when available, falling
 back to the country-only database otherwise. Unknown records remain without a
 city. The deployed database is the verified October 2026
 [DB-IP City Lite](https://db-ip.com/db/download/ip-to-city-lite) release in the
 persistent development volume. Visitor IPs are not sent to an external lookup API.
-
-Verify with `bench --site statistics.localhost execute statistics_diy.verify.cities`.
 
 The trend now snaps pointer movement to the nearest date, displays a floating
 metrics tooltip and crosshair, and supports tap selection. Selecting the same day

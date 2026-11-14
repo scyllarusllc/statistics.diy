@@ -1,8 +1,19 @@
 {
-  "name": "statistics-diy-ui",
+  "name": "statistics-diy",
+  "version": "1.0.0",
   "private": true,
+  "type": "module",
+  "description": "Self-hosted website and app analytics for independent developers.",
   "scripts": {
-    "build:css": "tailwindcss -i frontend/admin.css -o statistics_diy/public/css/admin.css --minify"
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test \"tests/*.test.*js\"",
+    "build:css": "tailwindcss -i frontend/admin.css -o public/css/admin.css --minify"
+  },
+  "engines": {"node": ">=22.13"},
+  "dependencies": {
+    "maxmind": "^5.1.0",
+    "nunjucks": "^3.2.4"
   },
   "devDependencies": {
     "@tailwindcss/cli": "4.3.3",

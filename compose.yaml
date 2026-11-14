@@ -1,0 +1,31 @@
+name: statistics-diy
+services:
+  app:
+    image: statistics-diy:local
+    build: .
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8080}:8080"
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-Administrator}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Set ADMIN_PASSWORD_HASH (node scripts/hash-password.mjs) in .env}
+      STATISTICS_PROXY_TOKEN: ${STATISTICS_PROXY_TOKEN:-}
+      STATISTICS_GEOIP_DATABASE: ${STATISTICS_GEOIP_DATABASE:-}
+    volumes:
+      - data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  data:
