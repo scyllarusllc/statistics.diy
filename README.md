@@ -54,7 +54,7 @@ On Linux or macOS with **Docker running and Docker Compose v2 installed**:
 curl -fsSL https://raw.githubusercontent.com/scyllarusllc/statistics.diy/main/install.sh | bash
 ```
 
-This builds a small Node.js image and starts it with a SQLite database in a dedicated Docker Compose stack. Open **http://localhost:8080** and sign in as **Administrator**. The generated password is the `ADMIN_PASSWORD` value in `~/.local/share/statistics-diy/.env` (created with private permissions and preserved on retries). Only its Argon-style scrypt hash, `ADMIN_PASSWORD_HASH`, is given to the container.
+This builds a small Node.js image and starts it with a SQLite database in a dedicated Docker Compose stack. Open **http://localhost:8090** and sign in as **Administrator**. The generated password is the `ADMIN_PASSWORD` value in `~/.local/share/statistics-diy/.env` (created with private permissions and preserved on retries). Only its Argon-style scrypt hash, `ADMIN_PASSWORD_HASH`, is given to the container.
 
 To choose a different port and installation directory:
 

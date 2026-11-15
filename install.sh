@@ -35,7 +35,7 @@ if [[ ! -f "$INSTALL_DIR/.env" ]]; then
   if [[ -n "$(ls -A "$INSTALL_DIR" | sed '/^\.install-lock$/d')" ]]; then
     fail 'The installation directory is not empty. Choose a new STATISTICS_DIY_DIR.'
   fi
-  HTTP_PORT=${STATISTICS_DIY_PORT:-8080}
+  HTTP_PORT=${STATISTICS_DIY_PORT:-8090}
   [[ "$HTTP_PORT" =~ ^[0-9]{1,5}$ ]] || fail 'STATISTICS_DIY_PORT must be a port number.'
   HTTP_PORT=$((10#$HTTP_PORT))
   (( HTTP_PORT >= 1024 && HTTP_PORT <= 65535 )) || fail 'Choose a port between 1024 and 65535.'
