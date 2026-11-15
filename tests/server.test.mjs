@@ -5,8 +5,10 @@ import {openDatabase} from '../src/db.mjs';
 import {createAuth} from '../src/auth.mjs';
 import {classify} from '../src/classify.mjs';
 import {isGlobal, normalizeIp} from '../src/network.mjs';
+import {flag} from '../src/geo.mjs';
 
 const VISITOR = 'a379bbf9-65b1-4a17-a7ce-569e13674ef9';
+assert.equal(flag('MP'), '🇲🇵');
 async function boot() {
   const db = openDatabase(':memory:');
   let origin, server;
@@ -23,13 +25,19 @@ test('admin session, project management, collection and reports', async t => {
   t.after(() => server.close());
   const json = (path, init = {}) => fetch(base + path, init).then(async r => ({status: r.status, body: await r.json().catch(() => null), headers: r.headers}));
 
-  assert.equal((await fetch(base + '/statistics_diy/admin/dashboard', {redirect: 'manual'})).status, 303);
+  const dashboardRedirect = await fetch(base + '/admin/dashboard', {redirect: 'manual'});
+  assert.equal(dashboardRedirect.status, 303);
+  assert.equal(dashboardRedirect.headers.get('location'), '/statistics_diy/login?next=%2Fadmin%2Fdashboard');
+  const oldDashboard = await fetch(base + '/statistics_diy/admin/dashboard', {redirect: 'manual'});
+  assert.equal(oldDashboard.status, 303);
+  assert.equal(oldDashboard.headers.get('location'), '/admin/dashboard');
   assert.equal((await json('/api/method/statistics_diy.api.summary')).status, 403);
   const bad = await json('/api/method/login', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({usr: 'Administrator', pwd: 'nope'})});
   assert.equal(bad.status, 401);
   const login = await fetch(base + '/api/method/login', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({usr: 'Administrator', pwd: 'secret'})});
   assert.equal(login.status, 200);
   const cookie = login.headers.get('set-cookie').split(';')[0];
+  assert.equal((await fetch(base + '/admin/dashboard', {headers: {cookie}})).status, 200);
   const csrf = (await (await fetch(base + '/statistics_diy/admin/projects', {headers: {cookie}})).text()).match(/csrf-token" content="([^"]+)"/)[1];
   const admin = (method, body) => json('/api/method/' + method, {method: 'POST', headers: {cookie, 'content-type': 'application/json', 'x-csrf-token': csrf}, body: JSON.stringify(body)});
 
@@ -37,7 +45,30 @@ test('admin session, project management, collection and reports', async t => {
   assert.equal((await admin('statistics_diy.api.save_project', {project_name: 'Bad', website_origin: 'https://example.com/private'})).status, 417);
   const first = (await admin('statistics_diy.api.save_project', {project_name: '<script>x</script>', website_origin: 'https://example.com'})).body.message.name;
   const second = (await admin('statistics_diy.api.save_project', {project_name: 'Other', website_origin: 'https://other.example'})).body.message.name;
+  const unauthenticatedProject = await fetch(base + '/admin/dashboard?project=' + first, {redirect: 'manual'});
+  assert.equal(unauthenticatedProject.headers.get('location'), '/statistics_diy/login?next=' + encodeURIComponent('/admin/dashboard?project=' + first));
+  const legacyProject = await fetch(base + '/admin/dashboard?project=' + first, {headers: {cookie}, redirect: 'manual'});
+  assert.equal(legacyProject.status, 303);
+  assert.equal(legacyProject.headers.get('location'), '/admin/project/example.com');
+  assert.equal((await fetch(base + '/admin/dashboard?project=missing', {headers: {cookie}})).status, 404);
+  assert.equal((await fetch(base + '/admin/project/example.com', {redirect: 'manual'})).headers.get('location'), '/statistics_diy/login?next=%2Fadmin%2Fproject%2Fexample.com');
+  const projectPage = await fetch(base + '/admin/project/example.com', {headers: {cookie}});
+  assert.equal(projectPage.status, 200);
+  const projectHtml = await projectPage.text();
+  assert.ok(projectHtml.includes('id="realtime-hero"'));
+  const mapAsset = await fetch(base + '/assets/statistics_diy/data/world-map.json');
+  assert.equal(mapAsset.status, 200);
+  assert.ok((await mapAsset.json()).countries.length > 100);
+  assert.ok(projectHtml.includes(`data-selected-project="${first}"`));
+  assert.ok(projectHtml.includes('data-domain="example.com"'));
+  assert.ok(!projectHtml.includes('<option value="">All projects</option>'));
+  assert.ok(projectHtml.includes('href="/admin/dashboard"'));
+  assert.ok(projectHtml.includes('&lt;script&gt;x&lt;/script&gt;'));
+  assert.equal((await json('/api/method/statistics_diy.api.realtime?project=' + first)).status, 403);
+  assert.equal((await json('/api/method/statistics_diy.api.realtime?project=' + first, {headers: {cookie}})).status, 200);
+  assert.equal((await fetch(base + '/admin/project/missing.example', {headers: {cookie}})).status, 404);
   const page = await (await fetch(base + '/statistics_diy/admin/projects', {headers: {cookie}})).text();
+  assert.ok(page.includes('href="/admin/project/example.com"'));
   assert.ok(page.includes('&lt;script&gt;x&lt;/script&gt;') && !page.includes('<script>x</script>'));
   const key = db.prepare('SELECT collection_key FROM projects WHERE id = ?').get(first).collection_key;
   assert.ok(page.includes(`&lt;script defer src=&quot;`) && page.includes(`data-key=&quot;${key}&quot;`));
@@ -58,6 +89,12 @@ test('admin session, project management, collection and reports', async t => {
   assert.equal(all.visitors, 1);
   assert.equal(all.referrers[0].referrer_host, 'ref.example');
   assert.equal((await report('?days=5')).status, 417);
+
+  db.prepare('INSERT INTO events (project, event_id, occurred_at, path, ip_address) VALUES (?, ?, ?, ?, ?)')
+    .run(first, 'country-flag-check', new Date().toISOString().slice(0, 19).replace('T', ' '), '/country', '8.8.8.8');
+  const countries = (await report('?project=' + first)).body.message.countries;
+  assert.equal(countries.reduce((total, row) => total + row.views, 0), 1);
+  assert.equal(countries[0].ip_count, 1);
 
   assert.equal((await admin('statistics_diy.maintenance.clear_data', {confirmation: 'nope'})).status, 417);
   assert.equal((await admin('statistics_diy.maintenance.save_settings', {retention_days: '90'})).status, 200);

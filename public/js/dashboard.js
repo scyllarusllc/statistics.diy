@@ -1,8 +1,10 @@
 (() => {
   const select = document.getElementById('analytics-project');
   if (!select) return;
-  const requestedProject = new URLSearchParams(location.search).get('project');
-  if ([...select.options].some(option => option.value === requestedProject)) select.value = requestedProject;
+  if (select.dataset.selectedProject) select.value = select.dataset.selectedProject;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const timezoneLabel = timezone.replaceAll('_', ' ');
+  document.querySelectorAll('[data-dashboard-timezone]').forEach(node => { node.textContent = timezoneLabel; });
   const status = document.getElementById('statistics-status');
   const results = document.getElementById('statistics-results');
   let generation = 0;
@@ -11,8 +13,31 @@
   let chartRows = [];
   const range = document.getElementById('report-range');
   const exportButton = document.getElementById('export-statistics');
+  const pinKey = 'statistics-diy-pinned-projects';
+  let pinnedProjects = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(pinKey) || '[]');
+    if (Array.isArray(saved)) pinnedProjects = saved.filter(id => typeof id === 'string');
+  } catch { /* Storage may be unavailable or contain an older value. */ }
+  function updatePinnedProjects() {
+    const section = document.getElementById('pinned-projects');
+    let visible = 0;
+    for (const link of document.querySelectorAll('[data-pinned-project]')) {
+      link.hidden = !pinnedProjects.includes(link.dataset.pinnedProject);
+      if (!link.hidden) visible++;
+    }
+    section.hidden = !visible;
+    document.querySelectorAll('[data-pin-button]').forEach(button => {
+      const pinned = pinnedProjects.includes(button.dataset.pinButton);
+      button.textContent = statisticsT(pinned ? 'Unpin' : 'Pin');
+      button.setAttribute('aria-pressed', String(pinned));
+      button.setAttribute('aria-label', statisticsT(pinned ? 'Unpin' : 'Pin') + ' ' + button.dataset.projectTitle);
+    });
+  }
+  updatePinnedProjects();
   let activeChartIndex = null;
   function chart(rows) {
+    const timezoneLabel = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     const target = document.getElementById('traffic-chart');
     const hadFocus = target.contains(document.activeElement);
     target.replaceChildren();
@@ -90,7 +115,7 @@
         point.setAttribute('cx', position); point.setAttribute('cy', y(row[key]));
       }
       bubble.replaceChildren();
-      const date = document.createElement('strong'); date.className = 'block'; date.textContent = row.day + ' · UTC'; bubble.append(date);
+      const date = document.createElement('strong'); date.className = 'block'; date.textContent = row.day + ' · ' + timezoneLabel; bubble.append(date);
       const metrics = row.available === false ? [statisticsT('Outside retention')] : series.map(([, key]) => `${statisticsT(key === 'views' ? 'Page views' : 'Unique visitors')}: ${row[key] ?? '—'}`);
       for (const metric of metrics) { const line = document.createElement('span'); line.className = 'block'; line.textContent = metric; bubble.append(line); }
       bubble.hidden = !floating;
@@ -225,15 +250,26 @@
         const value = item.visitors[index]; const dot = dots[seriesIndex];
         dot.style.display = value == null ? 'none' : ''; dot.setAttribute('cx', x(index)); dot.setAttribute('cy', y(value));
       });
-      tooltip.textContent = rows[index].day + ' · UTC · ' + series.map(item => `${item.project_name}: ${item.visitors[index] ?? '—'}`).join(' · ');
+      tooltip.textContent = rows[index].day + ' · ' + timezoneLabel + ' · ' + series.map(item => `${item.project_name}: ${item.visitors[index] ?? '—'}`).join(' · ');
     });
     svg.addEventListener('pointerleave', reset);
     reset();
   }
-  function ipCell(row) {
+  function countryCell(row) {
+    const country = document.createElement('span');
+    country.className = 'inline-flex items-center gap-2 whitespace-nowrap';
+    const name = row.country_name && row.country_name !== 'Unknown' ? row.country_name : statisticsT('Unknown');
+    if (row.country_flag) {
+      const flag = document.createElement('span'); flag.className = 'text-lg leading-none'; flag.textContent = row.country_flag;
+      flag.setAttribute('aria-label', name); country.append(flag);
+    }
+    const label = document.createElement('span'); label.textContent = name; country.append(label);
+    return country;
+  }
+  function ipCell(row, showLocation = true) {
     const container = document.createElement('span'); container.className = 'block whitespace-nowrap';
     const location = [row.country_flag, row.city || (row.country_name !== 'Unknown' ? row.country_name : '')].filter(Boolean).join(' ');
-    if (location) { const place = document.createElement('span'); place.className = 'mb-1 block font-medium text-slate-700'; place.textContent = location; container.append(place); }
+    if (showLocation && location) { const place = document.createElement('span'); place.className = 'mb-1 block font-medium text-slate-700'; place.textContent = location; container.append(place); }
     const ip = document.createElement('span'); ip.className = 'block font-mono text-[11px] text-slate-400';
     ip.textContent = row.ip_address || statisticsT('Not recorded'); container.append(ip);
     container.title = [row.city, row.region, row.country_name].filter(Boolean).join(', ');
@@ -273,20 +309,20 @@
     }
     container.append(element);
   }
-  function compactTime(value) { return value ? String(value).slice(0, 16).replace('T', ' ') : '—'; }
+  function compactTime(value) { return value ? new Intl.DateTimeFormat(undefined, {timeZone: timezone, year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}).format(new Date(String(value).replace(' ', 'T') + 'Z')) : '—'; }
   async function load() {
     const current = ++generation;
     report = null; exportButton.disabled = true;
     if (!report && !chartRows.length) results.hidden = true; status.textContent = statisticsT('Loading…');
     document.getElementById('manage-project').href = '/statistics_diy/admin/projects';
     try {
-      const response = await fetch('/api/method/statistics_diy.api.summary?project=' + encodeURIComponent(select.value) + '&days=' + range.value + '&exclude_bots=' + Number(document.getElementById('exclude-bots').checked), {credentials: 'same-origin'});
+      const response = await fetch('/api/method/statistics_diy.api.summary?project=' + encodeURIComponent(select.value) + '&days=' + range.value + '&exclude_bots=' + Number(document.getElementById('exclude-bots').checked) + '&timezone=' + encodeURIComponent(timezone), {credentials: 'same-origin'});
       if (!response.ok) throw new Error('Request failed');
       let {message: data} = await response.json();
       const trend = data.daily;
       const projectTrends = data.project_trends;
       if (selectedDay) {
-        const detail = await fetch('/api/method/statistics_diy.api.summary?project=' + encodeURIComponent(select.value) + '&days=' + range.value + '&exclude_bots=' + Number(document.getElementById('exclude-bots').checked) + '&day=' + selectedDay, {credentials: 'same-origin'});
+        const detail = await fetch('/api/method/statistics_diy.api.summary?project=' + encodeURIComponent(select.value) + '&days=' + range.value + '&exclude_bots=' + Number(document.getElementById('exclude-bots').checked) + '&timezone=' + encodeURIComponent(timezone) + '&day=' + selectedDay, {credentials: 'same-origin'});
         if (!detail.ok) throw new Error('Request failed');
         data = (await detail.json()).message;
       }
@@ -296,7 +332,7 @@
       document.getElementById('visitor-card-label').textContent = statisticsT(!data.visitor_count_complete ? 'Unique visitors (partial)' : data.ip_fallback_views ? 'Estimated unique visitors' : 'Unique visitors');
       document.getElementById('unique-visitors').textContent = data.identified_views || !data.total ? data.visitors : '—';
       document.getElementById('visitor-coverage').textContent = `${data.ip_visitors} ${statisticsT('additional visitors estimated from IPs')} · ${data.ip_fallback_views} ${statisticsT('views used IP fallback')} · ${data.unmeasured_views} ${statisticsT('views have neither a browser ID nor an IP.')}`;
-      document.getElementById('report-period').textContent = `${data.start} — ${data.end} · UTC · ${statisticsT('Data available since:')} ${data.retention_start}`;
+      document.getElementById('report-period').textContent = `${data.start} — ${data.end} · ${timezoneLabel} · ${statisticsT('Data available since:')} ${data.retention_start}`;
       chartRows = trend;
       chart(chartRows);
       projectTrend(projectTrends, trend);
@@ -305,9 +341,10 @@
       document.getElementById('today-statistics').textContent = data.today.views + ' / ' + data.today.visitors;
       for (const [key, rows] of Object.entries(data.breakdowns)) table('breakdown-' + key, rows.map(row => ({...row, label: statisticsT(row.label)})), 'label', statisticsT('Category'));
       detailsTable('recent-visits', data.recent, [
-        [statisticsT('Time (UTC)'), row => compactTime(row.occurred_at)],
+        [statisticsT('Time'), row => compactTime(row.occurred_at)],
         [statisticsT('Visitor'), row => row.visitor || '—'],
-        [statisticsT('IP address'), row => ipCell(row)],
+        [statisticsT('Country'), row => countryCell(row)],
+        [statisticsT('IP address'), row => ipCell(row, false)],
         [statisticsT('Project / Path'), row => {
           const cell = document.createElement('span'); cell.className = 'block max-w-64';
           const project = document.createElement('span'); project.className = 'mb-1 block text-[11px] text-slate-400'; project.textContent = data.projects.find(item => item.name === row.project)?.project_name || row.project;
@@ -329,8 +366,8 @@
           }); return input;
         }],
         [statisticsT('Visitor'), row => (data.projects.find(item => item.name === row.project)?.project_name || row.project) + ' · ' + row.visitor_id.slice(0, 10)],
-        [statisticsT('First seen (UTC)'), row => compactTime(row.first_seen)],
-        [statisticsT('Last seen (UTC)'), row => compactTime(row.last_seen)],
+        [statisticsT('First seen'), row => compactTime(row.first_seen)],
+        [statisticsT('Last seen'), row => compactTime(row.last_seen)],
         [statisticsT('Views'), row => row.visits], [statisticsT('Sessions'), row => row.sessions || '—']]);
       const appTarget = document.getElementById('app-statistics'); appTarget.replaceChildren();
       for (const [key, title] of [['dau', 'Active today (DAU)'], ['mau', 'Active last 30 days (MAU)'], ['installs', 'Known installs (retained data)'], ['pings', 'Stored app pings']]) {
@@ -341,23 +378,43 @@
       document.getElementById('project-overview').hidden = !data.all_projects;
       const totals = document.getElementById('project-totals'); totals.replaceChildren();
       for (const project of data.projects) {
-        const row = document.createElement('a');
-        row.href = '/statistics_diy/admin/dashboard?project=' + encodeURIComponent(project.name);
-        row.className = 'min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-4 hover:border-indigo-200';
+        const row = document.createElement('div');
+        row.className = 'min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-4';
+        const heading = document.createElement('div'); heading.className = 'flex items-start justify-between gap-3';
+        const link = document.createElement('a');
+        link.href = '/admin/project/' + encodeURIComponent(new URL(project.website_origin).host);
+        link.className = 'min-w-0 hover:text-indigo-600';
         const label = document.createElement('span');
         label.className = 'block truncate text-sm font-semibold'; label.textContent = project.project_name + (project.enabled ? '' : ' ' + statisticsT('(disabled)'));
+        link.append(label);
+        const pin = document.createElement('button'); pin.type = 'button'; pin.className = 'shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800';
+        pin.dataset.pinButton = project.name; pin.dataset.projectTitle = project.project_name;
+        pin.addEventListener('click', () => {
+          pinnedProjects = pinnedProjects.includes(project.name) ? pinnedProjects.filter(id => id !== project.name) : [...pinnedProjects, project.name];
+          try { localStorage.setItem(pinKey, JSON.stringify(pinnedProjects)); } catch { /* Keep the choice for this page. */ }
+          updatePinnedProjects();
+        });
+        heading.append(link, pin);
         const origin = document.createElement('span'); origin.className = 'mt-1 block truncate text-xs text-slate-400'; origin.textContent = project.website_origin; origin.title = project.website_origin;
         const count = document.createElement('strong'); count.className = 'mt-4 block text-xs font-medium tabular-nums text-slate-600'; count.textContent = project.views + ' ' + statisticsT('Views') + ' · ' + (project.unmeasured_views === project.views && project.views > 0 ? '—' : project.visitors) + ' ' + statisticsT(project.unmeasured_views ? 'Unique visitors (partial)' : 'Unique visitors');
-        row.append(label, origin, count); totals.append(row);
+        row.append(heading, origin, count); totals.append(row);
       }
+      updatePinnedProjects();
       table('top-ips', data.ips, 'ip_address', statisticsT('IP address'));
+      detailsTable('visitor-countries', data.countries, [
+        [statisticsT('Country'), row => countryCell(row)],
+        [statisticsT('Views'), row => row.views],
+        [statisticsT('IP addresses'), row => row.ip_count]]);
       table('referrers', data.referrers.map(row => ({...row, referrer_host: row.referrer_host || statisticsT('Direct / Unknown')})), 'referrer_host', statisticsT('Source'));
-      table('daily-views', data.daily, 'day', statisticsT('Date (UTC)'));
+      table('daily-views', data.daily, 'day', statisticsT('Date'));
       table('top-pages', data.pages.map(row => ({...row, path: data.all_projects ? `${row.project_name}: ${row.path}` : row.path})), 'path', statisticsT('Path'));
       status.textContent = ''; results.hidden = false;
     } catch (error) { if (current === generation) status.textContent = statisticsT('Unable to load analytics. Refresh or sign in again.'); }
   }
-  select.addEventListener('change', () => { selectedDay = null; load(); });
+  select.addEventListener('change', () => {
+    const project = [...select.options].find(option => option.value === select.value);
+    location.href = project?.dataset.domain ? '/admin/project/' + encodeURIComponent(project.dataset.domain) : '/admin/dashboard';
+  });
   range.addEventListener('change', () => { selectedDay = null; load(); });
   document.getElementById('exclude-bots').addEventListener('change', () => { selectedDay = null; load(); });
   setInterval(() => { if (!document.hidden && document.getElementById('auto-refresh').checked) load(); }, 60000);

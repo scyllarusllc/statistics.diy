@@ -6,13 +6,13 @@ import path from 'node:path';
 import {openDatabase, purgeExpired} from './src/db.mjs';
 import {createAuth} from './src/auth.mjs';
 import {collect, ping, saveProject, ApiError} from './src/collect.mjs';
-import {summary} from './src/reports.mjs';
+import {summary, realtime} from './src/reports.mjs';
 import {saveSettings, labelVisitor, clearData} from './src/maintenance.mjs';
 import {renderPage, PAGES} from './src/views.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const types = {'.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json'};
-const ADMIN_LANDING = '/statistics_diy/admin/dashboard';
+const ADMIN_LANDING = '/admin/dashboard';
 
 export function createApp({db, origin, auth, root = path.join(here, 'public')}) {
   const hostName = origin;
@@ -97,6 +97,12 @@ export function createApp({db, origin, auth, root = path.join(here, 'public')}) 
       send(res, 200, {message: await summary(db, Object.fromEntries(url.searchParams))});
       return;
     }
+    if (name === 'statistics_diy.api.realtime') {
+      if (req.method !== 'GET') throw new ApiError(405, 'Method not allowed.');
+      requireAdmin(req, false);
+      send(res, 200, {message: await realtime(db, Object.fromEntries(url.searchParams))});
+      return;
+    }
     const admin = {
       'statistics_diy.api.save_project': saveProject,
       'statistics_diy.maintenance.save_settings': saveSettings,
@@ -109,12 +115,28 @@ export function createApp({db, origin, auth, root = path.join(here, 'public')}) 
     send(res, 200, {message: admin(db, await readBody(req))});
   }
 
-  async function page(req, res, pathname) {
+  async function page(req, res, pathname, url) {
     const view = (name, base = {}) => send(res, 200, renderPage(name, {req, db, auth, host: hostName, base}), {'X-Frame-Options': 'DENY'});
+    if (pathname === '/statistics_diy/admin/dashboard') return redirect(res, ADMIN_LANDING + url.search);
     if (pathname === '/' || pathname === '/statistics_diy/user/homepage') return view('home', {is_homepage: true});
     if (pathname === '/statistics_diy/login' || pathname === '/login') {
       if (auth.isAdmin(req)) return redirect(res, ADMIN_LANDING);
       return view('login', {title: 'Sign in', is_login: true});
+    }
+    if (pathname.startsWith('/admin/project/')) {
+      if (!auth.isAdmin(req)) return redirect(res, '/statistics_diy/login?next=' + encodeURIComponent(pathname));
+      const domain = pathname.slice('/admin/project/'.length).toLowerCase();
+      if (!domain || domain.includes('/') || domain.includes('?') || domain.includes('#')) return false;
+      const projects = db.prepare('SELECT id AS name, project_name, website_origin FROM projects ORDER BY project_name').all();
+      const project = projects.find(item => new URL(item.website_origin).host.toLowerCase() === domain);
+      if (!project) return false;
+      return view('dashboard', {title: project.project_name, selected_project: project.name, project_domain: domain, project_title: project.project_name});
+    }
+    if (pathname === ADMIN_LANDING && url.searchParams.has('project')) {
+      if (!auth.isAdmin(req)) return redirect(res, '/statistics_diy/login?next=' + encodeURIComponent(pathname + url.search));
+      const project = db.prepare('SELECT website_origin FROM projects WHERE id = ?').get(url.searchParams.get('project'));
+      if (!project) return false;
+      return redirect(res, '/admin/project/' + encodeURIComponent(new URL(project.website_origin).host));
     }
     if (pathname in PAGES) {
       if (!auth.isAdmin(req)) return redirect(res, '/statistics_diy/login?next=' + encodeURIComponent(pathname));
@@ -141,7 +163,7 @@ export function createApp({db, origin, auth, root = path.join(here, 'public')}) 
       if (pathname.startsWith('/api/method/')) return await method(req, res, pathname.slice('/api/method/'.length), url);
       if (!['GET', 'HEAD'].includes(req.method)) throw new ApiError(405, 'Method not allowed.');
       if (pathname.startsWith('/assets/statistics_diy/')) return await asset(req, res, pathname);
-      if (await page(req, res, pathname) !== false) return;
+      if (await page(req, res, pathname, url) !== false) return;
       send(res, 404, '<!doctype html><title>Not found</title><h1>Not found</h1>');
     } catch (error) {
       if (error instanceof ApiError) return send(res, error.status, {error: error.message});

@@ -20,12 +20,11 @@ services:
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Set ADMIN_PASSWORD_HASH (node scripts/hash-password.mjs) in .env}
       STATISTICS_PROXY_TOKEN: ${STATISTICS_PROXY_TOKEN:-}
       STATISTICS_GEOIP_DATABASE: ${STATISTICS_GEOIP_DATABASE:-}
+      STATISTICS_IPINFO_TOKEN: ${STATISTICS_IPINFO_TOKEN:-}
     volumes:
-      - data:/data
+      - ./storage:/data
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-volumes:
-  data:

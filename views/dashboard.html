@@ -4,14 +4,38 @@
 {% endmacro %}
 {% block content %}
 <div class="mb-7 flex flex-wrap items-end justify-between gap-4">
-  <div><p class="mb-2 text-xs font-semibold tracking-widest text-indigo-600">{{ t('OVERVIEW') }}</p><h1 class="text-3xl font-bold tracking-tight">{{ t('Dashboard') }}</h1><p class="mt-2 text-sm text-slate-500">{{ t('Website traffic · UTC') }}</p></div>
-  <a id="manage-project" class="analytics-button-secondary" href="/statistics_diy/admin/projects">{{ t('Manage projects') }} →</a>
+  <div><p class="mb-2 text-xs font-semibold tracking-widest text-indigo-600">{{ t('OVERVIEW') }}</p><h1 class="text-3xl font-bold tracking-tight">{% if project_title %}{{ project_title | e }}{% else %}{{ t('Dashboard') }}{% endif %}</h1><p class="mt-2 text-sm text-slate-500">{{ t('Website traffic') }} · <span data-dashboard-timezone></span></p></div>
+  <div class="flex flex-wrap gap-2">{% if selected_project %}<a class="analytics-button-secondary" href="/admin/dashboard">{{ t('All projects') }} →</a>{% endif %}<a id="manage-project" class="analytics-button-secondary" href="/statistics_diy/admin/projects">{{ t('Manage projects') }} →</a></div>
 </div>
 {% if projects %}
+<section id="pinned-projects" class="analytics-panel mb-6" hidden aria-labelledby="pinned-projects-title">
+  <h2 id="pinned-projects-title" class="analytics-panel-title">{{ t('Pinned projects') }}</h2>
+  <div id="pinned-project-list" class="grid gap-3 md:grid-cols-2">
+    {% for project in all_projects %}<a data-pinned-project="{{ project.name | e }}" href="/admin/project/{{ project.domain | urlencode }}" class="min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-4 hover:border-indigo-200" hidden><span class="block truncate text-sm font-semibold">{{ project.project_name | e }}</span><span class="mt-1 block truncate text-xs text-slate-400">{{ project.website_origin | e }}</span></a>{% endfor %}
+  </div>
+</section>
+{% if selected_project %}
+<section id="realtime-hero" class="analytics-panel mb-6 overflow-hidden" data-project="{{ selected_project | e }}" aria-labelledby="realtime-title">
+  <div class="mb-5 flex flex-wrap items-start justify-between gap-4">
+    <div><div class="mb-2 flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span><span class="text-xs font-semibold uppercase tracking-widest text-emerald-700">{{ t('Live activity') }}</span></div><h2 id="realtime-title" class="text-2xl font-semibold tracking-tight">{{ t('Visitors seen recently') }}</h2><p class="mt-1 text-xs text-slate-500">{{ t('Based on page views. Updates every 15 seconds.') }}</p></div>
+    <div id="realtime-windows" class="flex flex-wrap gap-2" role="group" aria-label="{{ t('Live time window') }}"><button type="button" data-minutes="60" class="analytics-button-secondary">{{ t('1 hour') }}</button><button type="button" data-minutes="30" class="analytics-button-secondary">{{ t('30 min') }}</button><button type="button" data-minutes="10" class="analytics-button-secondary">{{ t('10 min') }}</button><button type="button" data-minutes="1" class="analytics-button-secondary">{{ t('1 min') }}</button></div>
+  </div>
+  <div class="grid min-w-0 gap-6 lg:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)] xl:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)_minmax(210px,.8fr)]">
+    <section class="min-w-0 rounded-xl border border-slate-200 bg-white p-4"><h3 class="text-sm font-semibold">{{ t('Recent visitors') }}</h3><p class="mt-1 text-xs text-slate-500">{{ t('Latest activity in the selected window.') }}</p><ul id="realtime-visitor-list" class="mt-4 max-h-[410px] space-y-2 overflow-y-auto pr-1"></ul></section>
+    <div class="min-w-0 rounded-xl bg-slate-50 p-3 sm:p-5"><div id="realtime-map" class="aspect-[900/414] w-full" role="img" aria-label="{{ t('Map of visitors seen recently') }}"></div><p class="mt-2 text-xs text-slate-400">{{ t('Country estimates from visitor IPs. Approximate locations.') }} <a href="https://www.naturalearthdata.com" target="_blank" rel="noopener noreferrer" class="underline">Natural Earth</a></p></div>
+    <div class="flex flex-col lg:col-span-2 xl:col-span-1"><div class="rounded-xl bg-indigo-50 p-5"><strong id="realtime-visitors" class="block text-5xl font-semibold tabular-nums text-indigo-700">—</strong><span class="mt-2 block text-sm font-medium text-indigo-900">{{ t('Visitors seen') }}</span><p id="realtime-views" class="mt-2 text-xs text-indigo-700"></p><p id="realtime-views-per-visitor" class="mt-1 text-xs text-indigo-700"></p><p id="realtime-last-visit" class="mt-1 text-xs text-indigo-700"></p></div><h3 class="mt-5 text-sm font-semibold">{{ t('Countries') }}</h3><ul id="realtime-countries" class="mt-3 space-y-2 text-sm"></ul><p id="realtime-updated" class="mt-auto pt-5 text-xs text-slate-400" role="status" aria-live="polite"></p></div>
+  </div>
+  <div class="mt-6 grid gap-4 border-t border-slate-100 pt-6 md:grid-cols-3">
+    <section class="min-w-0 rounded-xl bg-slate-50 p-4"><h3 class="text-sm font-semibold">{{ t('Top pages now') }}</h3><ol id="realtime-pages" class="mt-3 space-y-2 text-xs"></ol></section>
+    <section class="min-w-0 rounded-xl bg-slate-50 p-4"><h3 class="text-sm font-semibold">{{ t('Traffic sources now') }}</h3><ol id="realtime-sources" class="mt-3 space-y-2 text-xs"></ol></section>
+    <section class="min-w-0 rounded-xl bg-slate-50 p-4"><h3 class="text-sm font-semibold">{{ t('Devices now') }}</h3><ol id="realtime-devices" class="mt-3 space-y-2 text-xs"></ol></section>
+  </div>
+</section>
+{% endif %}
 <div class="analytics-panel mb-6">
   <div class="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px_auto]">
-    <label class="analytics-field-label" for="analytics-project">{{ t('Projects') }}
-      <select id="analytics-project" class="analytics-select"><option value="">{{ t('All projects') }}</option>{% for project in projects %}<option value="{{ project.name | e }}">{{ project.project_name | e }}{% if not project.enabled %} {{ t('(disabled)') }}{% endif %}</option>{% endfor %}</select>
+    <label class="analytics-field-label" for="analytics-project" {% if selected_project %}hidden{% endif %}>{{ t('Projects') }}
+      <select id="analytics-project" class="analytics-select" data-selected-project="{{ selected_project | e }}">{% if not selected_project %}<option value="">{{ t('All projects') }}</option>{% endif %}{% for project in projects %}<option value="{{ project.name | e }}" data-domain="{{ project.domain | e }}">{{ project.project_name | e }}{% if not project.enabled %} {{ t('(disabled)') }}{% endif %}</option>{% endfor %}</select>
     </label>
     <label class="analytics-field-label" for="report-range">{{ t('Date range') }}
       <select id="report-range" class="analytics-select">{% for days in [7,30,90,365] %}<option value="{{ days }}" {% if days == 30 %}selected{% endif %}>{{ t('Last ' ~ days ~ ' days') }}</option>{% endfor %}</select>
@@ -37,7 +61,7 @@
       <section class="analytics-metric"><h2 class="analytics-metric-label">{{ t('Page views') }}</h2><strong id="total-views" class="analytics-metric-value"></strong><p class="analytics-metric-note">{{ t('Selected period') }}</p></section>
       <section class="analytics-metric border-indigo-200"><h2 id="visitor-card-label" class="analytics-metric-label">{{ t('Unique visitors') }}</h2><strong id="unique-visitors" class="analytics-metric-value text-indigo-600"></strong><p class="analytics-metric-note">{{ t('Browser IDs with IP fallback') }}</p></section>
       <section class="analytics-metric"><h2 class="analytics-metric-label">{{ t('Repeat visitors') }}</h2><strong id="returning-visitors" class="analytics-metric-value"></strong><p class="analytics-metric-note">{{ t('Repeat / total visitors') }}</p></section>
-      <section class="analytics-metric"><h2 class="analytics-metric-label">{{ t('Today · views / visitors') }}</h2><strong id="today-statistics" class="analytics-metric-value"></strong><p class="analytics-metric-note">UTC</p></section>
+      <section class="analytics-metric"><h2 class="analytics-metric-label">{{ t('Today · views / visitors') }}</h2><strong id="today-statistics" class="analytics-metric-value"></strong><p class="analytics-metric-note" data-dashboard-timezone></p></section>
     </div>
     <p id="visitor-coverage" class="px-1 text-xs leading-relaxed text-slate-500"></p>
     <section class="analytics-panel">
@@ -48,20 +72,21 @@
     <section id="project-overview" class="analytics-panel"><h2 class="analytics-panel-title">{{ t('Projects summary') }}</h2><div id="project-totals" class="grid gap-3 md:grid-cols-2"></div></section>
   </section>
   <section id="traffic" class="scroll-mt-6 space-y-4"><h2 class="analytics-section-title">{{ t('Traffic sources') }}</h2><div class="grid gap-5 lg:grid-cols-2">{{ panel('Top pages','top-pages') }}{{ panel('Referral sources','referrers') }}</div>
+    <section class="analytics-panel"><h3 class="analytics-panel-title">{{ t('Visitor countries') }}</h3><p class="mb-4 text-xs text-slate-500">{{ t('Approximate location by IP address. Unknown addresses have no flag.') }}</p><div id="visitor-countries" class="analytics-table-scroll"></div></section>
     <details class="analytics-panel"><summary class="cursor-pointer text-sm font-semibold">{{ t('Daily page views') }}</summary><div id="daily-views" class="analytics-table-scroll mt-5 max-h-80"></div></details>
   </section>
   <section id="audience" class="scroll-mt-6 space-y-4"><h2 class="analytics-section-title">{{ t('Audience') }}</h2><div class="grid gap-5 lg:grid-cols-3">{% for id, title in [['device','Devices'],['browser','Browsers'],['operating_system','Operating systems']] %}{{ panel(title,'breakdown-' ~ id) }}{% endfor %}</div>
-    <section class="analytics-panel"><div class="mb-5 flex flex-wrap items-center justify-between gap-3"><h3 class="analytics-panel-title mb-0">{{ t('Top IP addresses') }}</h3><p class="text-xs text-slate-400">{{ t('Countries and cities are approximate IP locations.') }} <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer" class="text-indigo-600">DB-IP</a></p></div><div id="top-ips" class="analytics-table-scroll max-h-96"></div></section>
+    <section class="analytics-panel"><div class="mb-5 flex flex-wrap items-center justify-between gap-3"><h3 class="analytics-panel-title mb-0">{{ t('Top IP addresses') }}</h3><p class="text-xs text-slate-400">{{ t('Countries and cities are approximate IP locations.') }} <a href="https://ipinfo.io" target="_blank" rel="noopener noreferrer" class="text-indigo-600">IPinfo</a> · <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer" class="text-indigo-600">DB-IP</a></p></div><div id="top-ips" class="analytics-table-scroll max-h-96"></div></section>
   </section>
   <section id="activity" class="scroll-mt-6 space-y-4"><h2 class="analytics-section-title">{{ t('Visit details') }}</h2>
-    <section class="analytics-panel"><h3 class="analytics-panel-title mb-2">{{ t('Recent visits') }}</h3><p class="mb-5 text-xs text-slate-400">{{ t('Latest 20 visits in the selected period. Times are UTC.') }}</p><div id="recent-visits" class="analytics-table-scroll max-h-[480px]"></div></section>
+    <section class="analytics-panel"><h3 class="analytics-panel-title mb-2">{{ t('Recent visits') }}</h3><p class="mb-5 text-xs text-slate-400">{{ t('Latest 20 visits in the selected period.') }} <span data-dashboard-timezone></span></p><div id="recent-visits" class="analytics-table-scroll max-h-[480px]"></div></section>
     <details class="analytics-panel"><summary class="cursor-pointer text-sm font-semibold">{{ t('Known visitors') }}</summary><p class="my-4 text-xs text-slate-400">{{ t('Latest 30 browser IDs in this period. Labels are private to this project. Counts cover the selected period.') }}</p><div id="known-visitors" class="analytics-table-scroll max-h-96"></div></details>
   </section>
-  <section id="apps" class="scroll-mt-6 space-y-4"><h2 class="analytics-section-title">{{ t('App activity') }}</h2><section class="analytics-panel"><p class="mb-5 text-xs leading-relaxed text-slate-500">{{ t('Anonymous install estimates from timestamped app pings. DAU is today; MAU is the last 30 UTC dates.') }}</p><div id="app-statistics" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"></div><div id="app-platforms" class="analytics-table-scroll mt-6"></div></section></section>
-  <details class="analytics-panel"><summary class="cursor-pointer text-sm font-semibold">{{ t('Data and privacy') }}</summary><p class="mt-4 text-sm leading-relaxed text-slate-500">{{ t('Browser IDs are preferred; missing IDs fall back to IP within each project. Shared or changing IPs affect estimates.') }}</p><p class="mt-3 text-sm leading-relaxed text-slate-500">{{ t('Anonymous IDs expire after 90 days. IP addresses are stored with visits and deleted under the retention policy. No device fingerprints are stored. Country flags use an offline IP geolocation database.') }}</p><a class="mt-4 inline-block text-sm text-indigo-600" href="/statistics_diy/admin/settings">{{ t('Manage retention and data') }} →</a></details>
+  <section id="apps" class="scroll-mt-6 space-y-4"><h2 class="analytics-section-title">{{ t('App activity') }}</h2><section class="analytics-panel"><p class="mb-5 text-xs leading-relaxed text-slate-500">{{ t('Anonymous install estimates from timestamped app pings. DAU is today; MAU is the last 30 local dates.') }}</p><div id="app-statistics" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"></div><div id="app-platforms" class="analytics-table-scroll mt-6"></div></section></section>
+  <details class="analytics-panel"><summary class="cursor-pointer text-sm font-semibold">{{ t('Data and privacy') }}</summary><p class="mt-4 text-sm leading-relaxed text-slate-500">{{ t('Browser IDs are preferred; missing IDs fall back to IP within each project. Shared or changing IPs affect estimates.') }}</p><p class="mt-3 text-sm leading-relaxed text-slate-500">{{ t('Anonymous IDs expire after 90 days. IP addresses are stored with visits and deleted under the retention policy. No device fingerprints are stored. Country lookups send public visitor IPs to IPinfo when configured; an offline database can provide fallback locations.') }}</p><a class="mt-4 inline-block text-sm text-indigo-600" href="/statistics_diy/admin/settings">{{ t('Manage retention and data') }} →</a></details>
 </div>
 {% else %}
 <div class="analytics-panel py-12 text-center"><h2 class="text-xl font-semibold">{{ t('Start collecting website traffic') }}</h2><p class="mt-3 text-sm text-slate-500">{{ t('Create a project and add its tracking code to your website. Page views will appear here.') }}</p><a class="analytics-button-primary mt-6 inline-block" href="/statistics_diy/admin/projects">{{ t('Create your first project') }}</a></div>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script src="/assets/statistics_diy/js/dashboard.js?v=20261028-projecttrend4"></script>{% endblock %}
+{% block scripts %}<script src="/assets/statistics_diy/js/dashboard.js?v=20261115-pins"></script>{% if selected_project %}<script src="/assets/statistics_diy/js/realtime.js?v=20261115-live3"></script>{% endif %}{% endblock %}

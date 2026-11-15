@@ -11,7 +11,7 @@ coverage/
 .coverage
 
 # Local data and logs
-data/
+/data/
 storage/
 *.sqlite
 *.sqlite-wal

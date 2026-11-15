@@ -6,6 +6,19 @@
   button, summary { cursor: pointer; }
   button:disabled { cursor: wait; }
 }
+@keyframes live-arrive {
+  from { opacity: 0.25; transform: translateY(8px); background-color: #e0e7ff; }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes live-marker-pulse {
+  from { opacity: 0.9; transform: scale(0.5); }
+  to { opacity: 0; transform: scale(2.5); }
+}
+.live-new-visitor { animation: live-arrive 1.2s ease-out both; }
+.live-new-marker { transform-box: fill-box; transform-origin: center; animation: live-marker-pulse 1.6s ease-out both; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .live-new-visitor, .live-new-marker { animation: none; }
+}
 @layer components {
   .analytics-panel { @apply rounded-2xl border border-slate-200 bg-white p-5 sm:p-6; }
   .analytics-panel-title { @apply mb-5 text-sm font-semibold text-slate-900; }

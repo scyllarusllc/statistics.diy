@@ -9,7 +9,7 @@ const env = new nunjucks.Environment(new nunjucks.FileSystemLoader(fileURLToPath
 env.addFilter('tojson', value => JSON.stringify(value).replace(/[<>&']/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')));
 
 export const PAGES = {
-  '/statistics_diy/admin/dashboard': ['dashboard', 'Dashboard'],
+  '/admin/dashboard': ['dashboard', 'Dashboard'],
   '/statistics_diy/admin/projects': ['projects', 'Projects'],
   '/statistics_diy/admin/settings': ['settings', 'Settings']
 };
@@ -21,9 +21,14 @@ export function renderPage(name, {req, db, auth, host, base = {}}) {
   context.title = context.t(context.title || 'Home');
   if (name === 'projects') {
     context.projects = db.prepare('SELECT id AS name, project_name, website_origin, enabled, app_collection_key, collection_key FROM projects ORDER BY project_name').all()
-      .map(project => ({...project, tracking_snippet: trackingSnippet(project.collection_key, host)}));
+      .map(project => ({...project, domain: new URL(project.website_origin).host, tracking_snippet: trackingSnippet(project.collection_key, host)}));
   } else if (name === 'dashboard') {
-    context.projects = db.prepare('SELECT id AS name, project_name, website_origin, enabled FROM projects ORDER BY project_name').all();
+    context.all_projects = db.prepare('SELECT id AS name, project_name, website_origin, enabled FROM projects ORDER BY project_name').all()
+      .map(project => ({...project, domain: new URL(project.website_origin).host}));
+    context.projects = context.selected_project
+      ? db.prepare('SELECT id AS name, project_name, website_origin, enabled FROM projects WHERE id = ?').all(context.selected_project)
+      : db.prepare('SELECT id AS name, project_name, website_origin, enabled FROM projects ORDER BY project_name').all();
+    context.projects = context.projects.map(project => ({...project, domain: new URL(project.website_origin).host}));
   } else if (name === 'settings') {
     context.retention_days = retentionDays(db);
   } else if (name === 'home') {

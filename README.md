@@ -161,7 +161,7 @@ Exact collection defaults and retention periods will be documented as the implem
 - **Dashboard:** server-rendered Nunjucks templates in `views/`, vanilla JavaScript and compiled Tailwind CSS in `public/`, served at `/assets/statistics_diy/`.
 - **Authentication:** one administrator (`ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH`), cookie sessions stored hashed in SQLite, CSRF token on every state-changing request.
 - **Background work:** an in-process timer purges data past the retention period.
-- **GeoIP:** optional offline `.mmdb` database through the `maxmind` package (`STATISTICS_GEOIP_DATABASE`).
+- **GeoIP:** IPinfo Lite country lookups with `STATISTICS_IPINFO_TOKEN`, cached for 24 hours; optional offline `.mmdb` fallback through `STATISTICS_GEOIP_DATABASE`.
 
 Collection validation and aggregation live in `src/` separately from page rendering. A separate collector or analytics database can be introduced later if measured traffic justifies it.
 
@@ -199,13 +199,15 @@ MIT is the proposed license. A license file and copyright attribution will be ad
 ## First analytics workflow
 
 The app now includes **Analytics Project**, **Analytics Event**, a page-view tracker,
-and custom Tailwind CSS pages at `/statistics_diy/admin/dashboard` and
+and custom Tailwind CSS pages at `/admin/dashboard` and
 `/statistics_diy/admin/projects` (administrator access).
 
 1. Sign in at `/statistics_diy/login`, open `/statistics_diy/admin/projects` and select **创建项目**.
 2. Enter the project name and exact website origin, e.g. `https://example.com`.
 3. Save and expand **获取追踪代码**, then copy the snippet into the website's HTML.
-4. Choose the project on `/statistics_diy/admin/dashboard` to see page views, daily totals, top paths and referral sources. Select a 7/30/90-day range or export the report as CSV.
+4. Choose a project on `/admin/dashboard` to open `/admin/project/<domain>` and see that project's full analytics. Select a 7/30/90-day range or export the report as CSV. Existing `/admin/dashboard?project=<id>` links redirect to the domain page.
+
+The project page starts with a live activity map and a recent visitor list to its left. It counts distinct visitors seen in page views during the last 1, 10, 30 or 60 minutes and updates every 15 seconds while the tab is visible. The hero also shows the latest activity time, popular pages, referral sources and device types for that window. Visitor cards show their latest page, source, device details and view count. New visitors animate into the list and pulse on the map; reduced motion settings disable these effects. The selected window is saved in browser local storage for each project. The map uses country estimates rather than exact visitor locations. Its boundary data comes from [Natural Earth](https://www.naturalearthdata.com), packaged locally as a small JSON asset.
 
 The current snippet uses `https://statistics.diy` as the collector host. For another
 installation, adjust the script URL. Collection keys are public project identifiers,
@@ -334,16 +336,10 @@ client headers. Keep the proxy token private and Cloudflare ranges current.
 
 ### Country flags
 
-Top IPs and recent visits show country flag emoji, with the country name on hover.
-Lookups run locally against DB-IP Country Lite; no visitor IP is sent to a lookup
-service. Private, invalid or unknown addresses have no flag. Country assignments
-are approximate and based on the current database, including for historical IPs.
+The visitor countries panel shows flags, views and distinct IP counts by country. Recent visits has a country column with flags and names, and Top IPs shows country flags with the country name on hover.
+Set `STATISTICS_IPINFO_TOKEN` in the server's `.env` to use [IPinfo Lite](https://ipinfo.io/developers/lite-api). The server sends public visitor IPs to IPinfo in batches, keeps the token server side, and caches successful country results for 24 hours. Private, invalid or unknown addresses have no flag. Country assignments are approximate, including for historical IPs.
 
-The offline database is read from `/data/geoip/city.mmdb` or `/data/geoip/country.mmdb` (inside the `data` volume). It is not included in this repository. For another
-installation, provide a current MMDB file and set `STATISTICS_GEOIP_DATABASE` in
-the environment. Refresh the
-file periodically using DB-IP's monthly release. The dashboard includes the required
-[DB-IP attribution](https://db-ip.com/db/download/ip-to-country-lite).
+An optional offline MMDB at `/data/geoip/city.mmdb` or `/data/geoip/country.mmdb` provides fallback results if IPinfo is unavailable. Set `STATISTICS_GEOIP_DATABASE` to use another path. The dashboard credits [IPinfo](https://ipinfo.io) and [DB-IP](https://db-ip.com) for the respective data sources.
 
 ### Public homepage
 
@@ -385,12 +381,7 @@ The card reports extra visitors estimated from unmatched IPs, views using fallba
 and views lacking both identifiers. Events lacking both stay unavailable; historical
 records are not rewritten. Visitor labels remain tied to explicit browser IDs.
 
-Country flags also show the estimated city beside the IP; hover reveals the region
-and country. Lookups prefer `/data/geoip/city.mmdb` when available, falling
-back to the country-only database otherwise. Unknown records remain without a
-city. The deployed database is the verified October 2026
-[DB-IP City Lite](https://db-ip.com/db/download/ip-to-city-lite) release in the
-persistent development volume. Visitor IPs are not sent to an external lookup API.
+City and region appear only when the optional offline city database has that information. IPinfo Lite supplies country data, not city data.
 
 The trend now snaps pointer movement to the nearest date, displays a floating
 metrics tooltip and crosshair, and supports tap selection. Selecting the same day

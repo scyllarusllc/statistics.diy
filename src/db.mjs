@@ -1,6 +1,7 @@
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
+import {localDay} from './timezone.mjs';
 
 export const SCHEMA_VERSION = 1;
 
@@ -10,6 +11,7 @@ export const stamp = (date = new Date()) => date.toISOString().slice(0, 19).repl
 export function openDatabase(file) {
   if (file !== ':memory:') mkdirSync(path.dirname(file), {recursive: true, mode: 0o700});
   const db = new DatabaseSync(file);
+  db.function('report_day', {deterministic: true}, (timestamp, timezone) => localDay(new Date(timestamp.replace(' ', 'T') + 'Z'), timezone));
   if (db.prepare('PRAGMA user_version').get().user_version > SCHEMA_VERSION) {
     db.close();
     throw new Error('Database schema is newer than this application');

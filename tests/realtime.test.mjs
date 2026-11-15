@@ -1,0 +1,50 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {openDatabase} from '../src/db.mjs';
+import {realtime} from '../src/reports.mjs';
+
+test('realtime counts distinct visitors in each project window', async t => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  db.prepare("INSERT INTO projects VALUES ('a','A','https://a.example',1,'key-a','app-a','2026-11-15 00:00:00')").run();
+  db.prepare("INSERT INTO projects VALUES ('b','B','https://b.example',1,'key-b','app-b','2026-11-15 00:00:00')").run();
+  const now = new Date('2026-11-15T12:00:00Z');
+  const insert = db.prepare('INSERT INTO events (project, event_id, occurred_at, path, visitor_id, ip_address, is_bot) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const event = (id, secondsAgo, visitor, ip, bot = 0, project = 'a') => insert.run(project, id,
+    new Date(now.getTime() - secondsAgo * 1000).toISOString().slice(0, 19).replace('T', ' '), '/', visitor, ip, bot);
+  event('old', 3000, 'one', '10.0.0.1');
+  event('twenty-minutes', 1200, 'three', '10.0.0.6');
+  event('recent', 300, 'one', '10.0.0.1');
+  event('visitor-two', 45, 'two', '10.0.0.2');
+  event('missing-id', 30, null, '10.0.0.2');
+  db.prepare("UPDATE events SET path = '/latest', referrer_host = 'search.example' WHERE event_id = 'missing-id'").run();
+  event('ip-fallback', 20, null, '10.0.0.3');
+  event('bot', 10, 'bot', '10.0.0.4', 1);
+  event('other-project', 5, 'other', '10.0.0.5', 0, 'b');
+
+  const one = await realtime(db, {project: 'a', minutes: 1}, now);
+  assert.equal(one.visitors, 2);
+  assert.equal(one.page_views, 3);
+  assert.equal(one.last_visit_at, '2026-11-15 11:59:40');
+  assert.deepEqual(one.top_pages.map(row => [row.label, row.views]), [['/', 2], ['/latest', 1]]);
+  assert.equal(one.top_sources[0].label, 'Direct / Unknown');
+  assert.equal(one.top_sources[1].label, 'search.example');
+  assert.equal(one.devices[0].views, 3);
+  assert.equal(one.countries[0].visitors, 2);
+  assert.equal(one.active_ids.length, 2);
+  assert.equal(one.recent_visitors.length, 2);
+  assert.match(one.recent_visitors[0].id, /^[0-9a-f]{12}$/);
+  assert.equal(one.recent_visitors.find(visitor => visitor.path === '/latest')?.last_seen, '2026-11-15 11:59:30');
+  assert.equal(one.recent_visitors.find(visitor => visitor.path === '/latest')?.page_views, 2);
+  assert.ok(!JSON.stringify(one.recent_visitors).includes('10.0.0.'));
+  const ten = await realtime(db, {project: 'a', minutes: 10}, now);
+  assert.equal(ten.visitors, 3);
+  assert.equal(ten.page_views, 4);
+  assert.ok(ten.active_ids.includes(one.recent_visitors.find(visitor => visitor.path === '/latest').id));
+  const thirty = await realtime(db, {project: 'a', minutes: 30}, now);
+  assert.equal(thirty.visitors, 4);
+  assert.equal(thirty.page_views, 5);
+  assert.equal((await realtime(db, {project: 'a', minutes: 60}, now)).page_views, 6);
+  await assert.rejects(realtime(db, {project: 'a', minutes: 5}, now), {status: 417});
+  await assert.rejects(realtime(db, {project: 'missing', minutes: 10}, now), {status: 404});
+});
